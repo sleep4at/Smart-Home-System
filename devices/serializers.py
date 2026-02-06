@@ -11,10 +11,8 @@ class DeviceSerializer(serializers.ModelSerializer):
     """
 
     type_display = serializers.CharField(source="get_type_display", read_only=True)
-
-    # [新增] 使用 SerializerMethodField 覆盖默认的模型字段
-    # 这样读取时会调用下方的 get_is_online 方法，而不是直接读数据库的 is_online 字段
-    is_online = serializers.SerializerMethodField()
+    # 在线状态直接读取模型字段，由 MQTT/LWT 与设备上报维护
+    is_online = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Device
@@ -25,6 +23,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             "type_display",
             "location",
             "is_online",
+            "is_public",
             "current_state",
             "owner",
             "created_at",
@@ -32,14 +31,6 @@ class DeviceSerializer(serializers.ModelSerializer):
         ]
         # [新增] 只读字段
         read_only_fields = ["id", "created_at", "updated_at", "is_online"]
-
-    # [新增] 定义计算逻辑
-    def get_is_online(self, obj) -> bool:
-        # 这里调用我们在 models.py 里新写的 @property active_status
-        # 如果你还没修改 models.py，请务必先修改，否则这里会报错
-        if hasattr(obj, 'active_status'):
-            return obj.active_status
-        return False
 
 
 class DeviceHistoryPointSerializer(serializers.ModelSerializer):
