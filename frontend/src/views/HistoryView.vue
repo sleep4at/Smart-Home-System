@@ -3,6 +3,17 @@
     <div style="display: flex; justify-content: space-between; align-items: center;">
       <div class="app-main-subtitle">历史数据图表</div>
       <div style="display: flex; gap: 8px;">
+        <!-- 添加手动刷新按钮 -->
+        <button 
+          @click="fetchHistory" 
+          :disabled="isRefreshing"
+          class="field-select" 
+          style="width: 80px; cursor: pointer; background-color: #f3f4f6; transition: all 0.2s;"
+          :style="{ opacity: isRefreshing ? 0.5 : 1 }"
+        >
+          {{ isRefreshing ? '加载中...' : '刷新' }}
+        </button>
+
         <select v-model="selectedDeviceId" class="field-select" style="width: 200px;">
           <option :value="0">选择设备</option>
           <option v-for="d in devices.list" :key="d.id" :value="d.id">
@@ -20,13 +31,13 @@
       <v-chart :option="chartOption" style="width: 100%; height: 100%;" />
     </div>
     <div v-else style="flex: 1; display: flex; align-items: center; justify-content: center; color: #9ca3af;">
-      请选择设备和时间范围查看历史数据
+      {{ isRefreshing ? '正在同步云端数据...' : '请选择设备和时间范围查看历史数据' }}
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, onMounted, onUnmounted } from "vue";
 import { use } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { LineChart } from "echarts/charts";
@@ -54,16 +65,21 @@ const selectedDeviceId = ref<number>(0);
 const selectedRange = ref<string>("24h");
 const chartData = ref<{ timestamp: string; data: Record<string, unknown> }[]>([]);
 
-// --- 新增代码部分：监听设备列表，实现默认选中 ---
+const isRefreshing = ref(false);
+
+// --- 监听设备列表，实现默认选中 ---
 watch(
   () => devices.list,
-  (newList) => {
-    // 如果当前还没选设备，且设备列表里有数据
+  async (newList) => {
+    // 只有当目前没选设备，且列表里真的有设备时才执行
     if (selectedDeviceId.value === 0 && newList.length > 0) {
       selectedDeviceId.value = newList[0].id;
+      // 【关键修改点】在 ID 改变后，显式调用一次拉取函数
+      // 确保组件重新挂载时，只要有 ID 就能出图表
+      await fetchHistory(); 
     }
   },
-  { immediate: true } // 立即执行一次，防止进入页面时列表已经加载好了
+  { immediate: true }
 );
 // ------------------------------------------
 
@@ -72,14 +88,23 @@ async function fetchHistory() {
     chartData.value = [];
     return;
   }
+
+  isRefreshing.value = true;  // 开始加载
+
   try {
     const res = await api.get<{ points: { timestamp: string; data: Record<string, unknown> }[] }>(
       `/api/devices/${selectedDeviceId.value}/history/`,
       { params: { range: selectedRange.value } }
     );
     chartData.value = res.data.points || [];
-  } catch {
+  } catch (error) {
+    console.error("获取历史数据失败:", error);
     chartData.value = [];
+  } finally {
+    // 模拟一个微小的延迟，防止闪烁
+    setTimeout(() => {
+      isRefreshing.value = false;
+    }, 300);
   }
 }
 
@@ -201,4 +226,30 @@ const chartOption = computed(() => {
     series: [{ name: firstKey, type: "line", data: values, smooth: true, itemStyle: { color: "#2563eb" } }],
   };
 });
+
+
+// --- 自动刷新逻辑 ---
+let timer: any = null;
+
+onMounted(async () => {
+  if (selectedDeviceId.value !== 0) {
+    await fetchHistory();
+  }
+
+  // 每 30 秒自动执行一次获取数据的函数
+  timer = setInterval(() => {
+    // 只有当用户选了设备时才自动刷新，避免无效请求
+    if (selectedDeviceId.value !== 0) {
+      fetchHistory();
+    }
+  }, 15000); // 15000 毫秒 = 15 秒
+});
+
+onUnmounted(() => {
+  // 当页面销毁（切换到其他菜单）时，必须清除定时器
+  if (timer) {
+    clearInterval(timer);
+  }
+});
+// ------------------
 </script>
