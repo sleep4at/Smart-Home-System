@@ -89,8 +89,8 @@ const isOn = computed(
 );
 
 const canControl = computed(() => {
-  // 后端已经基于 owner/admin 做了权限，这里主要用于交互提示
-  return true;
+  // 离线时禁止操作；后端仍然会做二次权限校验
+  return props.device.is_online;
 });
 
 const temperatureText = computed(() => {
