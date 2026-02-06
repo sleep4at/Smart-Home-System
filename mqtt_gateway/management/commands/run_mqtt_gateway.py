@@ -14,6 +14,7 @@ from django.utils import timezone
 from devices.constants import DeviceType
 from devices.models import Device, DeviceData
 from logs_app.models import SystemLog
+from scenes.models import SceneRule
 
 
 class Command(BaseCommand):
@@ -142,6 +143,12 @@ class Command(BaseCommand):
                 except Exception as e:
                     self.stdout.write(self.style.WARNING(f"告警逻辑执行失败: {e}"))
 
+                # 场景规则执行引擎：检查是否有规则被触发
+                try:
+                    self._check_and_execute_scene_rules(device, payload)
+                except Exception as e:
+                    self.stdout.write(self.style.WARNING(f"场景规则执行失败: {e}"))
+
                 self.stdout.write(self.style.SUCCESS(f"成功更新设备 {device_id} 的数据并存入历史表"))
 
             except Exception as e:
@@ -191,3 +198,128 @@ class Command(BaseCommand):
             client.disconnect()
         except Exception as e:
             self.stdout.write(self.style.ERROR(str(e)))
+
+    def _check_and_execute_scene_rules(self, trigger_device: Device, payload: dict):
+        """
+        检查场景规则是否被触发，如果触发则执行动作。
+        """
+        from datetime import datetime, time as dt_time
+        from mqtt_gateway.utils import publish_device_command
+
+        # 查找所有启用且以该设备为触发设备的规则
+        rules = SceneRule.objects.filter(
+            enabled=True,
+            trigger_device=trigger_device,
+        ).select_related("action_device", "trigger_state_device")
+
+        now = timezone.now()
+        current_time = now.time()
+
+        for rule in rules:
+            # 防抖检查：如果距离上次触发时间太短，跳过
+            if rule.last_triggered_at:
+                delta = (now - rule.last_triggered_at).total_seconds()
+                if delta < rule.debounce_seconds:
+                    continue
+
+            # 检查触发条件
+            trigger_field_value = payload.get(rule.trigger_field)
+            if trigger_field_value is None:
+                continue
+
+            try:
+                trigger_field_value = float(trigger_field_value)
+            except (ValueError, TypeError):
+                continue
+
+            triggered = False
+
+            # 1. 阈值上限触发
+            if rule.trigger_type == SceneRule.TRIGGER_THRESHOLD_ABOVE:
+                threshold = float(rule.trigger_value) if isinstance(rule.trigger_value, (int, float)) else float(rule.trigger_value.get("value", 0))
+                triggered = trigger_field_value > threshold
+
+            # 2. 阈值下限触发
+            elif rule.trigger_type == SceneRule.TRIGGER_THRESHOLD_BELOW:
+                threshold = float(rule.trigger_value) if isinstance(rule.trigger_value, (int, float)) else float(rule.trigger_value.get("value", 0))
+                triggered = trigger_field_value < threshold
+
+            # 3. 区间外触发
+            elif rule.trigger_type == SceneRule.TRIGGER_RANGE_OUT:
+                if isinstance(rule.trigger_value, dict):
+                    min_val = float(rule.trigger_value.get("min", 0))
+                    max_val = float(rule.trigger_value.get("max", 0))
+                    triggered = trigger_field_value < min_val or trigger_field_value > max_val
+
+            # 4. 时间+状态组合触发
+            elif rule.trigger_type == SceneRule.TRIGGER_TIME_STATE:
+                # 检查时间范围
+                time_match = False
+                if rule.trigger_time_start and rule.trigger_time_end:
+                    if rule.trigger_time_start <= rule.trigger_time_end:
+                        # 正常范围（如 09:00-18:00）
+                        time_match = rule.trigger_time_start <= current_time <= rule.trigger_time_end
+                    else:
+                        # 跨天范围（如 23:00-02:00）
+                        time_match = current_time >= rule.trigger_time_start or current_time <= rule.trigger_time_end
+
+                # 检查状态设备
+                state_match = True
+                if rule.trigger_state_device and rule.trigger_state_value:
+                    device_state = rule.trigger_state_device.current_state or {}
+                    for key, expected_value in rule.trigger_state_value.items():
+                        if device_state.get(key) != expected_value:
+                            state_match = False
+                            break
+
+                triggered = time_match and state_match
+
+            if triggered:
+                # 执行动作
+                action_payload = {}
+                if rule.action_type == SceneRule.ACTION_TOGGLE:
+                    current_on = bool(rule.action_device.current_state.get("on", False))
+                    action_payload = {"on": not current_on}
+                elif rule.action_type == SceneRule.ACTION_SET_TEMP:
+                    temp_value = rule.action_value if isinstance(rule.action_value, (int, float)) else rule.action_value.get("temp", 26)
+                    action_payload = {"temp": float(temp_value), "on": True}
+                elif rule.action_type == SceneRule.ACTION_SET_FAN_SPEED:
+                    speed_value = rule.action_value if isinstance(rule.action_value, int) else rule.action_value.get("speed", 1)
+                    action_payload = {"speed": int(speed_value), "on": True}
+                elif rule.action_type == SceneRule.ACTION_TURN_ON:
+                    action_payload = {"on": True}
+                elif rule.action_type == SceneRule.ACTION_TURN_OFF:
+                    action_payload = {"on": False}
+
+                # 更新动作设备的状态
+                state = rule.action_device.current_state.copy()
+                state.update(action_payload)
+                rule.action_device.current_state = state
+                rule.action_device.save(update_fields=["current_state", "updated_at"])
+
+                # 发布 MQTT 命令
+                publish_device_command(device_id=rule.action_device.id, payload=action_payload)
+
+                # 更新规则的最后触发时间
+                rule.last_triggered_at = now
+                rule.save(update_fields=["last_triggered_at"])
+
+                # 记录日志
+                SystemLog.objects.create(
+                    level=SystemLog.LEVEL_INFO,
+                    source="SCENE_RULE",
+                    message=f"场景规则「{rule.name}」已触发：{trigger_device.name}({rule.trigger_field}={trigger_field_value}) → {rule.action_device.name}({rule.action_type})",
+                    data={
+                        "rule_id": rule.id,
+                        "trigger_device_id": trigger_device.id,
+                        "action_device_id": rule.action_device.id,
+                        "action_payload": action_payload,
+                    },
+                    user=rule.owner,
+                )
+
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"场景规则「{rule.name}」已触发并执行动作"
+                    )
+                )

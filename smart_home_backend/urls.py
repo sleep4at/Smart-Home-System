@@ -23,11 +23,13 @@ from accounts.views import MeView, UserViewSet
 from devices.views import DeviceHistoryView, DeviceTypeListView, DeviceViewSet
 from logs_app.views import SystemLogViewSet
 from mqtt_gateway.views import mqtt_status
+from scenes.views import SceneRuleViewSet
 
 router = routers.DefaultRouter()
 router.register(r"users", UserViewSet, basename="user")
 router.register(r"devices", DeviceViewSet, basename="device")
 router.register(r"logs/system", SystemLogViewSet, basename="system-log")
+router.register(r"scenes", SceneRuleViewSet, basename="scene-rule")
 
 urlpatterns = [
     path("admin/", admin.site.urls),

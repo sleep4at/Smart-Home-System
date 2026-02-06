@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'accounts',
     'devices',
     'logs_app',
+    'scenes',
     'mqtt_gateway',
 ]
 
