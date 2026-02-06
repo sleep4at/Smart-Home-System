@@ -16,6 +16,8 @@ class Device(models.Model):
     location = models.CharField("位置/房间", max_length=100, blank=True, default="")
     
     is_online = models.BooleanField("是否在线", default=False)
+    # 公共设备：所有用户都可见/可用；私人设备：仅所属用户 + 管理员可访问
+    is_public = models.BooleanField("是否为公共设备", default=False)
     # 当前状态：传感器或开关的最新值，JSON 结构由前端和模拟设备约定
     current_state = models.JSONField("当前状态", default=dict, blank=True)
 
@@ -39,15 +41,11 @@ class Device(models.Model):
     def __str__(self) -> str:
         return f"{self.name} ({self.get_type_display()})"
 
-    # [新增]动态计算在线状态的属性（临时使用）
+    # 在线状态统一由 MQTT/LWT 与设备上报维护，
+    # 这里提供一个别名属性，兼容旧代码，不再基于时间推算。
     @property
     def active_status(self):
-        if not self.updated_at:
-            return False
-        # 如果 "现在时间" - "最后更新时间" < 90秒，则认为在线
-        # 假设模拟器每30s发一次，如果90s没收到，说明掉线了
-        threshold = timezone.now() - timedelta(seconds=90)
-        return self.updated_at > threshold
+        return bool(self.is_online)
 
 
 class DeviceData(models.Model):

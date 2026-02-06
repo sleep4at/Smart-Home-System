@@ -31,8 +31,10 @@ class DeviceViewSet(viewsets.ModelViewSet):
         user = self.request.user
         qs = super().get_queryset()
         if user.is_staff or user.is_superuser:
+            # 管理员可以看到所有设备（包括公共和私人）
             return qs
-        return qs.filter(owner=user)
+        # 普通用户：自己名下的设备 + 公共设备
+        return qs.filter(owner=user) | qs.filter(is_public=True)
 
     def get_permissions(self):
         # 写操作（POST/PUT/PATCH/DELETE）只允许管理员

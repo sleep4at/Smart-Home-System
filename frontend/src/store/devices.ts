@@ -18,6 +18,7 @@ export interface Device {
   type_display: string;
   location: string;
   is_online: boolean;
+  is_public: boolean;
   current_state: Record<string, any>;
   owner: number | null;
 }
@@ -73,6 +74,10 @@ export const useDevicesStore = defineStore("devices", {
       const res = await api.patch<Device>(`/api/devices/${id}/`, payload);
       const idx = this.list.findIndex((d) => d.id === id);
       if (idx >= 0) this.list[idx] = res.data;
+    },
+    async deleteDevice(id: number) {
+      await api.delete(`/api/devices/${id}/`);
+      this.list = this.list.filter((d) => d.id !== id);
     },
     async toggleDevice(id: number, state?: boolean) {
       const res = await api.post<{ current_state: any }>(

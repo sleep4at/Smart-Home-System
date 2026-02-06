@@ -12,5 +12,8 @@ class IsDeviceOwnerOrAdmin(BasePermission):
             return False
         if user.is_staff or user.is_superuser:
             return True
+        # 公共设备：所有已登录用户可访问
+        if getattr(obj, "is_public", False):
+            return True
         return obj.owner_id == user.id
 
