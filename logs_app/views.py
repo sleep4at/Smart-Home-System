@@ -19,6 +19,15 @@ class SystemLogViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = SystemLog.objects.all()
+
+        # 支持通过 query 参数进行简单过滤（例如按 level/source）
+        level = self.request.query_params.get("level")
+        if level:
+            qs = qs.filter(level=level)
+        source = self.request.query_params.get("source")
+        if source:
+            qs = qs.filter(source=source)
+
         if user.is_staff or user.is_superuser:
             return qs
         return qs.filter(user__isnull=True) | qs.filter(user=user)

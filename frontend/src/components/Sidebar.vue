@@ -40,7 +40,9 @@ const route = useRoute();
 const items = [
   { route: "home", label: "主页", icon: "⌂" },
   { route: "history", label: "历史信息", icon: "📈" },
-  { route: "debug", label: "调试信息", icon: "🖥" }
+  { route: "debug", label: "调试信息", icon: "🖥" },
+  // 预留“场景模式（智能联动）”入口
+  { route: "scenes", label: "场景模式", icon: "🎛" },
 ];
 </script>
 

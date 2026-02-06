@@ -31,6 +31,7 @@ defineEmits<{ (e: "toggle"): void }>();
 const items = [
   { route: "admin-users", label: "用户管理", icon: "👥" },
   { route: "admin-devices", label: "设备管理", icon: "📱" },
+  { route: "admin-alerts", label: "安全告警", icon: "⚠️" },
   { route: "admin-debug-tools", label: "调试工具", icon: "🔧" },
   { route: "admin-console", label: "控制台输出", icon: "🖥" },
 ];

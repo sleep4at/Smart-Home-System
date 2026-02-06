@@ -30,6 +30,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@/views/DebugView.vue"),
         meta: { title: "调试信息" },
       },
+      {
+        path: "scenes",
+        name: "scenes",
+        component: () => import("@/views/ScenesView.vue"),
+        meta: { title: "场景模式" },
+      },
     ],
   },
   {
@@ -49,6 +55,12 @@ const routes: RouteRecordRaw[] = [
         name: "admin-devices",
         component: () => import("@/views/admin/DevicesView.vue"),
         meta: { title: "设备管理" },
+      },
+      {
+        path: "alerts",
+        name: "admin-alerts",
+        component: () => import("@/views/admin/AlertsView.vue"),
+        meta: { title: "安全告警" },
       },
       {
         path: "debug-tools",
