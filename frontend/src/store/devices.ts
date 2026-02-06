@@ -88,6 +88,26 @@ export const useDevicesStore = defineStore("devices", {
       if (idx >= 0) {
         this.list[idx].current_state = res.data.current_state;
       }
+    },
+    async setTemp(id: number, temp: number) {
+      const res = await api.post<{ current_state: any }>(
+        `/api/devices/${id}/set_temp/`,
+        { temp }
+      );
+      const idx = this.list.findIndex((d) => d.id === id);
+      if (idx >= 0) {
+        this.list[idx].current_state = res.data.current_state;
+      }
+    },
+    async setFanSpeed(id: number, speed: 1 | 2 | 3) {
+      const res = await api.post<{ current_state: any }>(
+        `/api/devices/${id}/set_fan_speed/`,
+        { speed }
+      );
+      const idx = this.list.findIndex((d) => d.id === id);
+      if (idx >= 0) {
+        this.list[idx].current_state = res.data.current_state;
+      }
     }
   }
 });

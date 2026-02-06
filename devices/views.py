@@ -76,6 +76,80 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
         return Response({"current_state": device.current_state})
 
+    @action(detail=True, methods=["post"])
+    def set_temp(self, request, pk=None):
+        """
+        设置空调温度。
+        """
+        device: Device = self.get_object()
+        if device.type != DeviceType.AC_SWITCH:
+            return Response(
+                {"error": "该设备不是空调设备"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        temp = request.data.get("temp")
+        if temp is None:
+            return Response(
+                {"error": "缺少 temp 参数"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            temp = float(temp)
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "温度值必须是数字"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 更新 current_state
+        state = device.current_state.copy()
+        state["temp"] = temp
+        state["on"] = True  # 设置温度时自动开启
+        device.current_state = state
+        device.save(update_fields=["current_state", "updated_at"])
+
+        from mqtt_gateway.utils import publish_device_command
+        publish_device_command(device_id=device.id, payload={"temp": temp, "on": True})
+
+        return Response({"current_state": device.current_state})
+
+    @action(detail=True, methods=["post"])
+    def set_fan_speed(self, request, pk=None):
+        """
+        设置风扇档位（1/2/3）。
+        """
+        device: Device = self.get_object()
+        if device.type != DeviceType.FAN_SWITCH:
+            return Response(
+                {"error": "该设备不是风扇设备"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        speed = request.data.get("speed")
+        if speed is None:
+            return Response(
+                {"error": "缺少 speed 参数"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            speed = int(speed)
+            if speed not in [1, 2, 3]:
+                raise ValueError("档位必须是 1、2 或 3")
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "档位必须是 1、2 或 3"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 更新 current_state
+        state = device.current_state.copy()
+        state["speed"] = speed
+        state["on"] = True  # 设置档位时自动开启
+        device.current_state = state
+        device.save(update_fields=["current_state", "updated_at"])
+
+        from mqtt_gateway.utils import publish_device_command
+        publish_device_command(device_id=device.id, payload={"speed": speed, "on": True})
+
+        return Response({"current_state": device.current_state})
+
 
 class DeviceHistoryView(APIView):
     """
