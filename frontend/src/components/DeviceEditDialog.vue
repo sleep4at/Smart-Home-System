@@ -9,6 +9,16 @@
       </div>
       <div class="dialog-body">
         <div>
+          <div class="field-label">设备 ID</div>
+          <input
+            :value="form.id || '自动生成'"
+            class="field-input"
+            style="background-color: #f3f4f6; cursor: not-allowed;"
+            disabled
+          />
+        </div>
+        
+        <div>
           <div class="field-label">设备名称</div>
           <input
             v-model="form.name"
@@ -62,7 +72,9 @@ const emit = defineEmits<{
   (e: "submit", payload: Partial<Device>): void;
 }>();
 
+// 在表单对象中增加 id 字段
 const emptyForm = () => ({
+  id: undefined as number | undefined,
   name: "",
   type: "" as any,
   location: ""
@@ -74,6 +86,8 @@ watch(
   () => props.device,
   (val) => {
     if (val) {
+      // 同步 ID 数据
+      form.id = val.id;
       form.name = val.name;
       form.type = val.type;
       form.location = val.location;
