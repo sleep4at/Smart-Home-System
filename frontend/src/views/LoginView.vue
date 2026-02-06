@@ -26,7 +26,7 @@
           使用管理员或普通账号登录
         </div>
       </div>
-      <div style="display: flex; flex-direction: column; gap: 10px;">
+      <form @submit.prevent="onLogin" style="display: flex; flex-direction: column; gap: 10px;">
         <div>
           <div class="field-label">用户名</div>
           <input
@@ -44,12 +44,23 @@
             placeholder="请输入密码"
           />
         </div>
-      </div>
-      <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
-        <button class="btn btn-primary" style="width: 100%;" @click="onLogin">
-          登录
-        </button>
-      </div>
+      
+        <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
+          <button 
+            type="submit" 
+            class="btn btn-primary" 
+            style="
+              width: 100%; 
+              display: flex; 
+              justify-content: center; 
+              align-items: center;
+              text-align: center;
+              "
+          >
+            登录
+          </button>
+        </div>
+      </form>
       <div v-if="error" style="margin-top: 10px; color: #dc2626; font-size: 13px;">
         {{ error }}
       </div>
