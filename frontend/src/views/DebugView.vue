@@ -28,8 +28,21 @@ const logs = useLogsStore();
 
 function formatTime(timestamp: string) {
   const d = new Date(timestamp);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+  const year = d.getFullYear();
+  // 月份从 0 开始，所以需要 +1
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  const seconds = String(d.getSeconds()).padStart(2, "0");
+
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
+
+// function formatTime(timestamp: string) {
+//   const d = new Date(timestamp);
+//   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+// }
 
 function refreshLogs() {
   logs.fetchLogs();
@@ -60,7 +73,8 @@ onUnmounted(() => clearInterval(t));
 }
 .debug-time {
   color: #64748b;
-  min-width: 80px;
+  min-width: 160px;
+  white-space: nowrap;  /* 不换行 */
 }
 .debug-level {
   min-width: 50px;
