@@ -37,12 +37,14 @@
 import { onMounted, onUnmounted, ref } from "vue";
 import { useDevicesStore } from "@/store/devices";
 import { useAuthStore } from "@/store/auth";
+import { useBannerStore } from "@/store/banner";
 import DeviceTile from "@/components/DeviceTile.vue";
 import DeviceEditDialog from "@/components/DeviceEditDialog.vue";
 import type { Device } from "@/store/devices";
 
 const devices = useDevicesStore();
 const auth = useAuthStore();
+const banner = useBannerStore();
 const showDialog = ref(false);
 const editingDevice = ref<Device | null>(null);
 
@@ -77,6 +79,11 @@ const onSubmitDevice = async (payload: Partial<Device>) => {
 };
 const onToggle = async (device: Device) => {
   await devices.toggleDevice(device.id);
+  const onOff = devices.list.find((d) => d.id === device.id)?.current_state?.on;
+  banner.add({
+    type: "success",
+    message: `指令已下发：${device.name} -> ${onOff ? "开" : "关"}`,
+  });
 };
 </script>
 

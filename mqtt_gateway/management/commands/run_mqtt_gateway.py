@@ -8,6 +8,8 @@ import json
 import paho.mqtt.client as mqtt
 from django.conf import settings
 from django.core.mail import mail_admins
+
+from logs_app.email_alert import send_email_alerts_for_value
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -77,17 +79,20 @@ class Command(BaseCommand):
 
                 # LWT / 在线离线状态处理
                 if suffix.lower() == "lwt":
-                    # 约定：payload 为 "offline"/"online"
                     text = payload if isinstance(payload, str) else str(payload)
                     is_online = text.lower() not in ("offline", "0", "false")
                     device.is_online = is_online
                     device.save(update_fields=["is_online", "updated_at"])
 
+                    if is_online:
+                        lwt_msg = f"设备 [{device.name}] 已上线"
+                    else:
+                        lwt_msg = f"警告：设备 [{device.name}] 异常离线"
                     SystemLog.objects.create(
                         level=SystemLog.LEVEL_WARN if not is_online else SystemLog.LEVEL_INFO,
                         source="MQTT_LWT",
-                        message=f"设备 {device.name}({device_id}) LWT 报文：{text}",
-                        data={"topic": topic, "payload": text},
+                        message=lwt_msg,
+                        data={"topic": topic, "payload": text, "device_id": device_id},
                         user=device.owner,
                     )
                     return
@@ -99,16 +104,17 @@ class Command(BaseCommand):
 
                 # 记录历史数据
                 DeviceData.objects.create(
-                    device=device, 
-                    timestamp=timezone.now(), 
-                    data=payload
+                    device=device,
+                    timestamp=timezone.now(),
+                    data=payload,
                 )
 
-                # 记录日志
+                # 记录日志：详细说明各字段更新值
+                detail_msg = self._format_state_message(device.name, device_id, payload)
                 SystemLog.objects.create(
                     level=SystemLog.LEVEL_INFO,
                     source="MQTT_GATEWAY",
-                    message=f"设备 {device.name}({device_id}) 状态已更新",
+                    message=detail_msg,
                     data={"topic": topic, "payload": payload},
                     user=device.owner,
                 )
@@ -116,7 +122,8 @@ class Command(BaseCommand):
                 # 安全告警：温度超过阈值（例如 35°C）
                 try:
                     if (
-                        device.type == DeviceType.TEMP_HUMI
+                        # device.type == DeviceType.TEMP_HUMI
+                        device.type == DeviceType.TEMPERATURE_HUMIDITY
                         and isinstance(payload, dict)
                         and "temp" in payload
                     ):
@@ -134,14 +141,26 @@ class Command(BaseCommand):
                                 data={"topic": topic, "payload": payload, "threshold": threshold},
                                 user=device.owner,
                             )
-                            # 邮件通知管理员（依赖 Django ADMINS / 邮件配置）
                             try:
                                 mail_admins(subject="[安全告警] 温度过高", message=msg, fail_silently=True)
                             except Exception:
-                                # 邮件失败不应影响主流程
+                                pass
+                            try:
+                                send_email_alerts_for_value(device, "temp", temp_value)
+                            except Exception:
                                 pass
                 except Exception as e:
                     self.stdout.write(self.style.WARNING(f"告警逻辑执行失败: {e}"))
+
+                # 通用邮件告警：对上报中的数值字段检查邮件规则
+                if isinstance(payload, dict):
+                    for field in ("temp", "humi", "light", "pressure"):
+                        if field in payload:
+                            try:
+                                v = float(payload[field])
+                                send_email_alerts_for_value(device, field, v)
+                            except (ValueError, TypeError):
+                                pass
 
                 # 场景规则执行引擎：检查是否有规则被触发
                 try:
@@ -198,6 +217,47 @@ class Command(BaseCommand):
             client.disconnect()
         except Exception as e:
             self.stdout.write(self.style.ERROR(str(e)))
+
+    def _format_state_message(self, device_name: str, device_id: int, payload: dict) -> str:
+        """将状态 payload 格式化为可读的日志消息。"""
+        if not isinstance(payload, dict):
+            return f"设备 [{device_name}]({device_id}) 状态已更新"
+        parts = []
+        if "temp" in payload:
+            parts.append(f"温度 {payload['temp']}°C")
+        if "humi" in payload:
+            parts.append(f"湿度 {payload['humi']}%RH")
+        if "on" in payload:
+            parts.append("开" if payload["on"] else "关")
+        if "speed" in payload:
+            parts.append(f"档位 {payload['speed']}")
+        if "light" in payload:
+            parts.append(f"光照 {payload['light']}")
+        if "pressure" in payload:
+            parts.append(f"气压 {payload['pressure']}")
+        for k, v in payload.items():
+            if k in ("temp", "humi", "on", "speed", "light", "pressure"):
+                continue
+            parts.append(f"{k}={v}")
+        if not parts:
+            return f"设备 [{device_name}]({device_id}) 状态已更新"
+        return f"设备 [{device_name}] 上报：{', '.join(parts)}"
+
+    def _format_action_desc(self, action_device_name: str, action_type: str, action_payload: dict) -> str:
+        """格式化为场景联动描述。"""
+        if action_type == SceneRule.ACTION_SET_TEMP:
+            temp = action_payload.get("temp", 26)
+            return f"已自动将 {action_device_name} 设置为 {temp}°C"
+        if action_type == SceneRule.ACTION_SET_FAN_SPEED:
+            speed = action_payload.get("speed", 1)
+            return f"已自动将 {action_device_name} 设为 {speed} 档"
+        if action_type == SceneRule.ACTION_TURN_ON:
+            return f"已自动开启 {action_device_name}"
+        if action_type == SceneRule.ACTION_TURN_OFF:
+            return f"已自动关闭 {action_device_name}"
+        if action_type == SceneRule.ACTION_TOGGLE:
+            return f"已自动切换 {action_device_name} 开关"
+        return f"已执行 {action_device_name} 动作"
 
     def _check_and_execute_scene_rules(self, trigger_device: Device, payload: dict):
         """
@@ -304,11 +364,13 @@ class Command(BaseCommand):
                 rule.last_triggered_at = now
                 rule.save(update_fields=["last_triggered_at"])
 
-                # 记录日志
+                # 记录日志（便于横幅展示）
+                action_desc = self._format_action_desc(rule.action_device.name, rule.action_type, action_payload)
+                scene_msg = f"场景联动：{action_desc}"
                 SystemLog.objects.create(
                     level=SystemLog.LEVEL_INFO,
                     source="SCENE_RULE",
-                    message=f"场景规则「{rule.name}」已触发：{trigger_device.name}({rule.trigger_field}={trigger_field_value}) → {rule.action_device.name}({rule.action_type})",
+                    message=scene_msg,
                     data={
                         "rule_id": rule.id,
                         "trigger_device_id": trigger_device.id,

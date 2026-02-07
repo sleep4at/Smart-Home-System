@@ -21,7 +21,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from accounts.views import MeView, UserViewSet
 from devices.views import DeviceHistoryView, DeviceTypeListView, DeviceViewSet
-from logs_app.views import SystemLogViewSet
+from logs_app.views import EmailAlertRuleViewSet, SystemLogViewSet
 from mqtt_gateway.views import mqtt_status
 from scenes.views import SceneRuleViewSet
 
@@ -29,6 +29,7 @@ router = routers.DefaultRouter()
 router.register(r"users", UserViewSet, basename="user")
 router.register(r"devices", DeviceViewSet, basename="device")
 router.register(r"logs/system", SystemLogViewSet, basename="system-log")
+router.register(r"alerts/email-rules", EmailAlertRuleViewSet, basename="email-alert-rule")
 router.register(r"scenes", SceneRuleViewSet, basename="scene-rule")
 
 urlpatterns = [
