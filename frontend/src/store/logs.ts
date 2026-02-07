@@ -17,10 +17,10 @@ export const useLogsStore = defineStore("logs", {
     loading: false,
   }),
   actions: {
-    async fetchLogs() {
+    async fetchLogs(params?: { limit?: number; source?: string; level?: string }) {
       this.loading = true;
       try {
-        const res = await api.get<SystemLog[]>("/api/logs/system/");
+        const res = await api.get<SystemLog[]>("/api/logs/system/", { params });
         this.list = res.data;
       } finally {
         this.loading = false;

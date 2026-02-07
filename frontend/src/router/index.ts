@@ -25,12 +25,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "历史信息" },
       },
       {
-        path: "debug",
-        name: "debug",
-        component: () => import("@/views/DebugView.vue"),
-        meta: { title: "调试信息" },
-      },
-      {
         path: "scenes",
         name: "scenes",
         component: () => import("@/views/ScenesView.vue"),
@@ -61,6 +55,12 @@ const routes: RouteRecordRaw[] = [
         name: "admin-alerts",
         component: () => import("@/views/admin/AlertsView.vue"),
         meta: { title: "安全告警" },
+      },
+      {
+        path: "email-alerts",
+        name: "admin-email-alerts",
+        component: () => import("@/views/admin/EmailAlertsView.vue"),
+        meta: { title: "邮件告警" },
       },
       {
         path: "debug-tools",
