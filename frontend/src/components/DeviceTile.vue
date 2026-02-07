@@ -128,10 +128,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import type { Device } from "@/store/devices";
 import { useAuthStore } from "@/store/auth";
 import { useDevicesStore } from "@/store/devices";
+import { useBannerStore } from "@/store/banner";
 
 const props = defineProps<{
   device: Device;
@@ -144,6 +145,7 @@ const emit = defineEmits<{
 
 const auth = useAuthStore();
 const devicesStore = useDevicesStore();
+const banner = useBannerStore();
 
 const isAdmin = computed(() => auth.isAdmin);
 const isTempHumi = computed(() => props.device.type === "TEMP_HUMI");
@@ -206,11 +208,19 @@ const adjustTemp = async (delta: number) => {
   if (!canControl.value) return;
   const newTemp = Math.max(16, Math.min(30, currentTemp.value + delta));
   await devicesStore.setTemp(props.device.id, newTemp);
+  banner.add({
+    type: "success",
+    message: `指令已下发：${props.device.name} -> ${newTemp}°C`,
+  });
 };
 
 const setSpeed = async (speed: 1 | 2 | 3) => {
   if (!canControl.value) return;
   await devicesStore.setFanSpeed(props.device.id, speed);
+  banner.add({
+    type: "success",
+    message: `指令已下发：${props.device.name} -> ${speed}档`,
+  });
 };
 </script>
 
