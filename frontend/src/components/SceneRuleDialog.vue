@@ -23,33 +23,31 @@
             <option value="THRESHOLD_ABOVE">高于阈值</option>
             <option value="THRESHOLD_BELOW">低于阈值</option>
             <option value="RANGE_OUT">超出范围</option>
-            <option value="TIME_STATE">时间+状态组合</option>
+            <option value="TIME_STATE">定时触发（时间 + 可选条件）</option>
           </select>
         </div>
 
-        <div>
-          <div class="field-label">触发设备</div>
-          <select v-model="form.trigger_device" class="field-select">
-            <option disabled :value="0">请选择设备</option>
-            <option
-              v-for="d in sensorDevices"
-              :key="d.id"
-              :value="d.id"
-            >
-              {{ d.name }} ({{ d.type_display }})
-            </option>
-          </select>
-        </div>
-
-        <div>
-          <div class="field-label">触发字段</div>
-          <select v-model="form.trigger_field" class="field-select">
-            <option value="temp">温度 (temp)</option>
-            <option value="humi">湿度 (humi)</option>
-            <option value="light">光照 (light)</option>
-            <option value="pressure">气压 (pressure)</option>
-          </select>
-        </div>
+        <!-- 阈值/区间类：触发设备 + 触发字段 -->
+        <template v-if="form.trigger_type !== 'TIME_STATE'">
+          <div>
+            <div class="field-label">触发设备</div>
+            <select v-model="form.trigger_device" class="field-select">
+              <option disabled :value="0">请选择设备</option>
+              <option v-for="d in sensorDevices" :key="d.id" :value="d.id">
+                {{ d.name }} ({{ d.type_display }})
+              </option>
+            </select>
+          </div>
+          <div>
+            <div class="field-label">触发字段</div>
+            <select v-model="form.trigger_field" class="field-select">
+              <option value="temp">温度 (temp)</option>
+              <option value="humi">湿度 (humi)</option>
+              <option value="light">光照 (light)</option>
+              <option value="pressure">气压 (pressure)</option>
+            </select>
+          </div>
+        </template>
 
         <div v-if="form.trigger_type === 'THRESHOLD_ABOVE' || form.trigger_type === 'THRESHOLD_BELOW'">
           <div class="field-label">阈值</div>
@@ -84,44 +82,59 @@
           </div>
         </div>
 
-        <div v-if="form.trigger_type === 'TIME_STATE'">
-          <div style="display: flex; gap: 12px;">
+        <!-- 定时触发：时间范围 + 可选“仅当某设备满足条件时才执行” -->
+        <div v-if="form.trigger_type === 'TIME_STATE'" class="time-state-block">
+          <div class="field-hint time-state-hint">
+            在下面设定的<strong>每日时间段</strong>内，当「用于触发检查的设备」有数据上报时，会检查是否满足条件并执行动作。不选「附加条件」则到点就执行；选了则需同时满足（例如：18:00–23:00 且 人体传感器已探测 → 开灯）。
+          </div>
+          <div class="field-label">时间范围（每日）</div>
+          <div style="display: flex; gap: 12px; margin-bottom: 12px;">
             <div style="flex: 1;">
-              <div class="field-label">开始时间</div>
-              <input
-                v-model="form.trigger_time_start"
-                type="time"
-                class="field-input"
-              />
+              <input v-model="form.trigger_time_start" type="time" class="field-input" />
+              <span class="field-hint-inline">开始</span>
             </div>
             <div style="flex: 1;">
-              <div class="field-label">结束时间</div>
-              <input
-                v-model="form.trigger_time_end"
-                type="time"
-                class="field-input"
-              />
+              <input v-model="form.trigger_time_end" type="time" class="field-input" />
+              <span class="field-hint-inline">结束</span>
             </div>
           </div>
-          <div style="margin-top: 12px;">
-            <div class="field-label">状态设备（可选）</div>
-            <select v-model="form.trigger_state_device" class="field-select">
-              <option :value="null">不限制</option>
-              <option
-                v-for="d in switchDevices"
-                :key="d.id"
-                :value="d.id"
-              >
-                {{ d.name }} ({{ d.type_display }})
-              </option>
+          <div class="field-label">附加条件（可选）</div>
+          <div class="field-hint" style="margin-bottom: 6px;">仅当以下设备满足状态时才执行，不选则只按时间执行</div>
+          <select v-model="form.trigger_state_device" class="field-select">
+            <option :value="null">不限制（到时间就执行）</option>
+            <option v-for="d in stateConditionDevices" :key="d.id" :value="d.id">
+              {{ d.name }} ({{ d.type_display }})
+            </option>
+          </select>
+          <div v-if="form.trigger_state_device" style="margin-top: 8px;">
+            <div class="field-label">{{ selectedStateDeviceIsPir ? "探测状态" : "开关状态" }}</div>
+            <select v-if="selectedStateDeviceIsPir" v-model="form.trigger_state_detected" class="field-select">
+              <option :value="true">已探测（有人时）</option>
+              <option :value="false">未探测</option>
             </select>
-          </div>
-          <div v-if="form.trigger_state_device" style="margin-top: 12px;">
-            <div class="field-label">状态值</div>
-            <select v-model="form.trigger_state_on" class="field-select">
+            <select v-else v-model="form.trigger_state_on" class="field-select">
               <option :value="true">开启</option>
               <option :value="false">关闭</option>
             </select>
+          </div>
+          <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #e5e7eb;">
+            <div class="field-label">用于触发检查的设备</div>
+            <div class="field-hint" style="margin-bottom: 6px;">定时规则需在“某设备上报数据时”检查时间，请选择一台会定期上报的设备（如温湿度、人体感应）</div>
+            <select v-model="form.trigger_device" class="field-select">
+              <option disabled :value="0">请选择设备</option>
+              <option v-for="d in timeTriggerDevices" :key="d.id" :value="d.id">
+                {{ d.name }} ({{ d.type_display }})
+              </option>
+            </select>
+            <div style="margin-top: 6px;">
+              <div class="field-label">触发字段（任选其一，仅用于保存）</div>
+              <select v-model="form.trigger_field" class="field-select">
+                <option value="temp">温度 (temp)</option>
+                <option value="humi">湿度 (humi)</option>
+                <option value="light">光照 (light)</option>
+                <option value="pressure">气压 (pressure)</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -221,6 +234,27 @@ const switchDevices = computed(() =>
   )
 );
 
+/** 定时触发时的“附加条件”可选设备：开关类 + 人体感应 */
+const stateConditionDevices = computed(() =>
+  props.devices.filter((d) =>
+    ["LAMP_SWITCH", "AC_SWITCH", "FAN_SWITCH", "PIR"].includes(d.type)
+  )
+);
+
+/** 定时触发时“用于触发检查”的设备：会定期或事件上报的传感器 + 人体感应 */
+const timeTriggerDevices = computed(() =>
+  props.devices.filter((d) =>
+    ["TEMP_HUMI", "LIGHT", "PRESSURE", "PIR"].includes(d.type)
+  )
+);
+
+/** 当前选中的状态设备是否为人体感应（用于显示 已探测/未探测） */
+const selectedStateDeviceIsPir = computed(() => {
+  if (!form.trigger_state_device) return false;
+  const d = props.devices.find((x) => x.id === form.trigger_state_device);
+  return d?.type === "PIR";
+});
+
 const actionDevices = computed(() =>
   props.devices.filter((d) =>
     ["LAMP_SWITCH", "AC_SWITCH", "FAN_SWITCH"].includes(d.type)
@@ -239,6 +273,7 @@ const emptyForm = () => ({
   trigger_time_end: "",
   trigger_state_device: null as number | null,
   trigger_state_on: true,
+  trigger_state_detected: true,
   action_device: 0,
   action_type: "TOGGLE" as SceneRule["action_type"],
   action_temp: 26,
@@ -265,7 +300,16 @@ watch(
       form.trigger_time_start = val.trigger_time_start?.slice(0, 5) || "";
       form.trigger_time_end = val.trigger_time_end?.slice(0, 5) || "";
       form.trigger_state_device = val.trigger_state_device;
-      form.trigger_state_on = val.trigger_state_value?.on ?? true;
+      if (val.trigger_state_value && typeof val.trigger_state_value === "object") {
+        if ("motion" in val.trigger_state_value) {
+          form.trigger_state_detected = !!val.trigger_state_value.motion;
+        } else if ("value" in val.trigger_state_value) {
+          form.trigger_state_detected = Number(val.trigger_state_value.value) > 0;
+        }
+        if ("on" in val.trigger_state_value) {
+          form.trigger_state_on = !!val.trigger_state_value.on;
+        }
+      }
       form.action_device = val.action_device;
       form.action_type = val.action_type;
       if (val.action_type === "SET_TEMP") {
@@ -282,11 +326,14 @@ watch(
 );
 
 const onTriggerTypeChange = () => {
-  // 切换触发类型时重置相关字段
   if (form.trigger_type !== "TIME_STATE") {
     form.trigger_time_start = "";
     form.trigger_time_end = "";
     form.trigger_state_device = null;
+  } else {
+    if (!form.trigger_device || !timeTriggerDevices.value.some((d) => d.id === form.trigger_device)) {
+      form.trigger_device = timeTriggerDevices.value[0]?.id ?? 0;
+    }
   }
 };
 
@@ -318,10 +365,15 @@ const onSubmit = () => {
     action_value = form.action_speed;
   }
 
-  // 构建 trigger_state_value
+  // 构建 trigger_state_value（定时 + 附加条件）
   let trigger_state_value: Record<string, any> | null = null;
   if (form.trigger_type === "TIME_STATE" && form.trigger_state_device) {
-    trigger_state_value = { on: form.trigger_state_on };
+    const stateDev = props.devices.find((d) => d.id === form.trigger_state_device);
+    if (stateDev?.type === "PIR") {
+      trigger_state_value = { motion: form.trigger_state_detected };
+    } else {
+      trigger_state_value = { on: form.trigger_state_on };
+    }
   }
 
   if (!form.name?.trim()) {
@@ -329,7 +381,11 @@ const onSubmit = () => {
     return;
   }
   if (!form.trigger_device || form.trigger_device === 0) {
-    emit("error", "请选择触发设备。");
+    emit("error", form.trigger_type === "TIME_STATE" ? "请选择用于触发检查的设备。" : "请选择触发设备。");
+    return;
+  }
+  if (form.trigger_type === "TIME_STATE" && (!form.trigger_time_start || !form.trigger_time_end)) {
+    emit("error", "请设置定时触发的开始和结束时间。");
     return;
   }
   if (!form.action_device || form.action_device === 0) {
@@ -357,3 +413,21 @@ const onSubmit = () => {
   emit("submit", payload);
 };
 </script>
+
+<style scoped>
+.time-state-block .time-state-hint {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: #f0f9ff;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #0c4a6e;
+}
+.field-hint-inline {
+  display: block;
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+</style>
