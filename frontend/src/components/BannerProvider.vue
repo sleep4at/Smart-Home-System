@@ -77,8 +77,8 @@ let mqttTimer: ReturnType<typeof setInterval> | null = null;
 onMounted(() => {
   if (!auth.isAuthenticated) return;
   updateMqttStatus();
-  pollTimer = setInterval(pollLogs, 5000);
-  mqttTimer = setInterval(updateMqttStatus, 3000); // 每 3 秒刷新 MQTT 状态，供主页指示器实时显示
+  pollTimer = setInterval(pollLogs, 2000);
+  mqttTimer = setInterval(updateMqttStatus, 2000); // 每 2 秒刷新 MQTT 状态，供主页指示器实时显示（轮询）
 });
 
 onUnmounted(() => {

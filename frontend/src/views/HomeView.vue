@@ -52,7 +52,7 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null;
 onMounted(async () => {
   await devices.fetchDevices();
   if (auth.isAdmin) await devices.fetchTypes();
-  refreshTimer = setInterval(() => devices.fetchDevices(), 5000);
+  refreshTimer = setInterval(() => devices.fetchDevices(), 2000); // 每 2 秒刷新一次设备列表（轮询）
 });
 onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer);
