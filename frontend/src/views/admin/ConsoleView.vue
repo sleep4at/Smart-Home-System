@@ -1,7 +1,7 @@
 <template>
   <section style="display: flex; flex-direction: column; gap: 16px; flex: 1;">
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-      <div class="app-main-subtitle">控制台输出（系统调试日志）</div>
+      <div class="app-main-subtitle">日志信息（系统调试日志）</div>
       <div style="display: flex; gap: 8px; align-items: center;">
         <select v-model="filterSource" class="field-select" style="width: 140px;">
           <option value="">全部来源</option>

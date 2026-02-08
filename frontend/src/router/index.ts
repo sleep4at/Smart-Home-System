@@ -66,7 +66,7 @@ const routes: RouteRecordRaw[] = [
         path: "console",
         name: "admin-console",
         component: () => import("@/views/admin/ConsoleView.vue"),
-        meta: { title: "控制台输出" },
+        meta: { title: "日志信息" },
       },
     ],
   },
