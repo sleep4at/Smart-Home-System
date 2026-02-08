@@ -148,6 +148,9 @@
             <option value="TURN_ON">开启设备</option>
             <option value="TURN_OFF">关闭设备</option>
           </select>
+          <div class="field-hint" style="margin-top: 4px; color: #6b7280; font-size: 12px;">
+            切换开关：根据当前状态取反（开→关，关→开）；开启/关闭设备：固定设为开或关。
+          </div>
         </div>
 
         <div v-if="form.action_type === 'SET_TEMP'">
@@ -203,6 +206,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "submit", payload: Partial<SceneRule>): void;
+  (e: "error", message: string): void;
 }>();
 
 const sensorDevices = computed(() =>
@@ -320,21 +324,34 @@ const onSubmit = () => {
     trigger_state_value = { on: form.trigger_state_on };
   }
 
+  if (!form.name?.trim()) {
+    emit("error", "请输入规则名称。");
+    return;
+  }
+  if (!form.trigger_device || form.trigger_device === 0) {
+    emit("error", "请选择触发设备。");
+    return;
+  }
+  if (!form.action_device || form.action_device === 0) {
+    emit("error", "请选择执行设备。");
+    return;
+  }
+
   const payload: Partial<SceneRule> = {
-    name: form.name,
+    name: form.name.trim(),
     enabled: true,
     trigger_type: form.trigger_type,
-    trigger_device: form.trigger_device,
+    trigger_device: Number(form.trigger_device),
     trigger_field: form.trigger_field,
     trigger_value,
     trigger_time_start: form.trigger_type === "TIME_STATE" && form.trigger_time_start ? `${form.trigger_time_start}:00` : null,
     trigger_time_end: form.trigger_type === "TIME_STATE" && form.trigger_time_end ? `${form.trigger_time_end}:00` : null,
-    trigger_state_device: form.trigger_type === "TIME_STATE" ? form.trigger_state_device : null,
+    trigger_state_device: form.trigger_type === "TIME_STATE" ? (form.trigger_state_device ? Number(form.trigger_state_device) : null) : null,
     trigger_state_value,
-    action_device: form.action_device,
+    action_device: Number(form.action_device),
     action_type: form.action_type,
     action_value,
-    debounce_seconds: form.debounce_seconds,
+    debounce_seconds: Number(form.debounce_seconds) || 60,
   };
 
   emit("submit", payload);

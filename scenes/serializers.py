@@ -43,23 +43,35 @@ class SceneRuleSerializer(serializers.ModelSerializer):
             "updated_at",
             "last_triggered_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "last_triggered_at"]
+        read_only_fields = ["id", "owner", "created_at", "updated_at", "last_triggered_at"]
 
     def validate(self, attrs):
         """验证规则逻辑的合理性。"""
         trigger_type = attrs.get("trigger_type")
         trigger_value = attrs.get("trigger_value")
+        trigger_device = attrs.get("trigger_device")
+        action_device = attrs.get("action_device")
+
+        # 创建时传入的可能是 pk (int)，0 表示未选择
+        tpk = trigger_device if isinstance(trigger_device, int) else getattr(trigger_device, "pk", None)
+        if tpk is None or tpk == 0:
+            raise serializers.ValidationError({"trigger_device": "请选择触发设备。"})
+        apk = action_device if isinstance(action_device, int) else getattr(action_device, "pk", None)
+        if apk is None or apk == 0:
+            raise serializers.ValidationError({"action_device": "请选择执行设备。"})
 
         if trigger_type == SceneRule.TRIGGER_RANGE_OUT:
             if not isinstance(trigger_value, dict) or "min" not in trigger_value or "max" not in trigger_value:
                 raise serializers.ValidationError(
-                    "区间触发类型需要 trigger_value 为 {\"min\": X, \"max\": Y} 格式"
+                    {"trigger_value": "区间触发类型需要 trigger_value 为 {\"min\": X, \"max\": Y} 格式"}
                 )
             if trigger_value["min"] >= trigger_value["max"]:
-                raise serializers.ValidationError("最小值必须小于最大值")
+                raise serializers.ValidationError({"trigger_value": "最小值必须小于最大值"})
 
         if trigger_type == SceneRule.TRIGGER_TIME_STATE:
             if not attrs.get("trigger_time_start") or not attrs.get("trigger_time_end"):
-                raise serializers.ValidationError("时间+状态组合触发需要设置开始和结束时间")
+                raise serializers.ValidationError(
+                    {"trigger_time_start": "时间+状态组合触发需要设置开始和结束时间"}
+                )
 
         return attrs

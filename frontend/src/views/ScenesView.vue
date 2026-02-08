@@ -72,6 +72,7 @@
       :devices="devices.list"
       @close="closeDialog"
       @submit="onSubmitRule"
+      @error="onRuleError"
     />
   </section>
 </template>
@@ -158,12 +159,26 @@ const closeDialog = () => {
 };
 
 const onSubmitRule = async (payload: Partial<SceneRule>) => {
-  if (editingRule.value?.id) {
-    await scenes.updateScene(editingRule.value.id, payload);
-  } else {
-    await scenes.createScene(payload);
+  try {
+    if (editingRule.value?.id) {
+      await scenes.updateScene(editingRule.value.id, payload);
+    } else {
+      await scenes.createScene(payload);
+    }
+    showDialog.value = false;
+  } catch (err: any) {
+    const msg = err?.response?.data?.trigger_device?.[0]
+      || err?.response?.data?.action_device?.[0]
+      || err?.response?.data?.trigger_value?.[0]
+      || err?.response?.data?.trigger_time_start?.[0]
+      || err?.response?.data?.detail
+      || (typeof err?.response?.data === "object" ? JSON.stringify(err.response.data) : err?.message || "保存失败");
+    onRuleError(msg);
   }
-  showDialog.value = false;
+};
+
+const onRuleError = (message: string) => {
+  if (typeof window !== "undefined" && window.alert) window.alert(message);
 };
 
 const toggleEnabled = async (rule: SceneRule) => {
