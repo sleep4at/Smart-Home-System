@@ -20,13 +20,17 @@ def send_email_alerts_for_value(device, field: str, value: float):
     ).select_related("trigger_device")
 
     for rule in rules:
-        if rule.trigger_value is None:
+        # 烟雾告警：trigger_value 可为 None，视为 1（触发即发邮件）
+        threshold = rule.trigger_value
+        if threshold is None and field != "smoke":
             continue
+        if field == "smoke" and threshold is None:
+            threshold = 1.0
         triggered = False
         if rule.trigger_above:
-            triggered = value >= rule.trigger_value
+            triggered = value >= threshold
         else:
-            triggered = value <= rule.trigger_value
+            triggered = value <= threshold
 
         if not triggered:
             continue
@@ -42,7 +46,7 @@ def send_email_alerts_for_value(device, field: str, value: float):
                 time=timezone.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
         except KeyError:
-            subject = f"[智能家居告警] {rule.get_preset_display()} - {device.name}"
+            subject = f"[告警] {rule.get_preset_display()} - {device.name}"
 
         try:
             body = rule.body_template.format(

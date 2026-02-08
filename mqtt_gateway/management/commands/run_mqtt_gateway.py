@@ -161,6 +161,16 @@ class Command(BaseCommand):
                                 send_email_alerts_for_value(device, field, v)
                             except (ValueError, TypeError):
                                 pass
+                    # 烟雾告警：二值触发（1=触发，0=未触发）
+                    if device.type == DeviceType.SMOKE:
+                        triggered = (
+                            payload.get("smoke") is True
+                            or payload.get("alarm") is True
+                            or bool(payload.get("value"))
+                        )
+                        send_email_alerts_for_value(
+                            device, "smoke", 1.0 if triggered else 0.0
+                        )
 
                 # 场景规则执行引擎：检查是否有规则被触发
                 try:

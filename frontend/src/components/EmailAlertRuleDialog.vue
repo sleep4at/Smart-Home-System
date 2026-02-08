@@ -33,9 +33,11 @@
         <div>
           <div class="field-label">触发设备</div>
           <select v-model="form.trigger_device" class="field-select">
-            <option disabled :value="0">请选择设备</option>
+            <option disabled :value="0">
+              {{ form.preset === "smoke" ? "请选择烟雾传感器" : "请选择设备" }}
+            </option>
             <option
-              v-for="d in sensorDevices"
+              v-for="d in triggerDeviceOptions"
               :key="d.id"
               :value="d.id"
             >
@@ -44,32 +46,37 @@
           </select>
         </div>
 
-        <div>
-          <div class="field-label">触发字段</div>
-          <select v-model="form.trigger_field" class="field-select">
-            <option value="temp">温度 (temp)</option>
-            <option value="humi">湿度 (humi)</option>
-            <option value="light">光照 (light)</option>
-            <option value="pressure">气压 (pressure)</option>
-          </select>
-        </div>
-
-        <div>
-          <div class="field-label">触发条件</div>
-          <div style="display: flex; gap: 12px; align-items: center;">
-            <select v-model="form.trigger_above" class="field-select" style="width: 120px;">
-              <option :value="true">高于阈值</option>
-              <option :value="false">低于阈值</option>
+        <template v-if="form.preset !== 'smoke'">
+          <div>
+            <div class="field-label">触发字段</div>
+            <select v-model="form.trigger_field" class="field-select">
+              <option value="temp">温度 (temp)</option>
+              <option value="humi">湿度 (humi)</option>
+              <option value="light">光照 (light)</option>
+              <option value="pressure">气压 (pressure)</option>
             </select>
-            <input
-              v-model.number="form.trigger_value"
-              type="number"
-              step="0.1"
-              class="field-input"
-              placeholder="阈值"
-              style="flex: 1;"
-            />
           </div>
+          <div>
+            <div class="field-label">触发条件</div>
+            <div style="display: flex; gap: 12px; align-items: center;">
+              <select v-model="form.trigger_above" class="field-select" style="width: 120px;">
+                <option :value="true">高于阈值</option>
+                <option :value="false">低于阈值</option>
+              </select>
+              <input
+                v-model.number="form.trigger_value"
+                type="number"
+                step="0.1"
+                class="field-input"
+                placeholder="阈值"
+                style="flex: 1;"
+              />
+            </div>
+          </div>
+        </template>
+        <div v-else>
+          <div class="field-label">触发条件</div>
+          <div class="field-static">触发</div>
         </div>
 
         <div>
@@ -141,6 +148,14 @@ const sensorDevices = computed(() =>
   )
 );
 
+/** 烟雾告警仅能选烟雾传感器，其他预设可选所有传感器 */
+const triggerDeviceOptions = computed(() => {
+  if (form.preset === "smoke") {
+    return props.devices.filter((d) => d.type === "SMOKE");
+  }
+  return sensorDevices.value;
+});
+
 function parseEmails(text: string): string[] {
   return text
     .split(/[\n,;]+/)
@@ -201,8 +216,13 @@ function applyPreset() {
     form.trigger_field = "humi";
     form.trigger_above = form.preset === "humi_high";
   } else if (form.preset === "smoke") {
-    form.trigger_field = "temp";
+    form.trigger_field = "smoke";
+    form.trigger_value = 1;
     form.trigger_above = true;
+    const smokeDevices = props.devices.filter((d) => d.type === "SMOKE");
+    if (!smokeDevices.some((d) => d.id === form.trigger_device)) {
+      form.trigger_device = smokeDevices[0]?.id ?? 0;
+    }
   }
 }
 
@@ -236,9 +256,9 @@ const onSubmit = () => {
     enabled: true,
     preset: form.preset,
     trigger_device: form.trigger_device,
-    trigger_field: form.trigger_field,
-    trigger_value: form.trigger_value,
-    trigger_above: form.trigger_above,
+    trigger_field: form.preset === "smoke" ? "smoke" : form.trigger_field,
+    trigger_value: form.preset === "smoke" ? 1 : form.trigger_value,
+    trigger_above: form.preset === "smoke" ? true : form.trigger_above,
     recipients: parseEmails(form.recipientsText),
     cc_list: parseEmails(form.ccText),
     subject_template: form.subject_template,
@@ -247,3 +267,13 @@ const onSubmit = () => {
   emit("submit", payload);
 };
 </script>
+
+<style scoped>
+.field-static {
+  padding: 8px 12px;
+  background: #f3f4f6;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #374151;
+}
+</style>

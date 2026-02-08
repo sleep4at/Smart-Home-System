@@ -45,6 +45,12 @@
           {{ device.type_display }}
         </div>
       </div>
+      <div v-else-if="isSmoke" class="device-metrics">
+        <div class="metric-main">{{ device.type_display }}</div>
+        <div class="smoke-status" :class="smokeStatusClass">
+          {{ smokeStatusText }}
+        </div>
+      </div>
       <div v-else class="device-metrics">
         <div class="metric-main">{{ device.type_display }}</div>
         <div class="metric-sub">
@@ -152,9 +158,32 @@ const isTempHumi = computed(() => props.device.type === "TEMP_HUMI");
 const isAC = computed(() => props.device.type === "AC_SWITCH");
 const isFan = computed(() => props.device.type === "FAN_SWITCH");
 const isLampSwitch = computed(() => props.device.type === "LAMP_SWITCH");
+const isSmoke = computed(() => props.device.type === "SMOKE");
 const isSwitch = computed(() =>
   ["LAMP_SWITCH", "AC_SWITCH", "FAN_SWITCH"].includes(props.device.type)
 );
+
+/** 烟雾传感器二值：根据 payload 的 smoke / alarm / value 判断是否触发 */
+const smokeTriggered = computed(() => {
+  const s = props.device.current_state;
+  if (!s || typeof s !== "object") return false;
+  if (s.smoke === true || s.alarm === true) return true;
+  const v = s.value;
+  if (v !== undefined && v !== null) return Number(v) > 0;
+  return false;
+});
+
+/** 烟雾传感器状态文案：离线显示「未获取」，在线按触发与否显示「正常」/「警告」 */
+const smokeStatusText = computed(() => {
+  if (!props.device.is_online) return "未获取";
+  return smokeTriggered.value ? "警告" : "正常";
+});
+
+/** 烟雾传感器状态样式类 */
+const smokeStatusClass = computed(() => {
+  if (!props.device.is_online) return "smoke-unknown";
+  return smokeTriggered.value ? "smoke-warning" : "smoke-normal";
+});
 
 const isOn = computed(
   () => !!(props.device.current_state && props.device.current_state.on)
@@ -300,6 +329,27 @@ const setSpeed = async (speed: 1 | 2 | 3) => {
 .speed-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.smoke-status {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 4px;
+}
+.smoke-status.smoke-normal {
+  background: #dcfce7;
+  color: #166534;
+}
+.smoke-status.smoke-warning {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.smoke-status.smoke-unknown {
+  background: #f3f4f6;
+  color: #6b7280;
 }
 </style>
 
