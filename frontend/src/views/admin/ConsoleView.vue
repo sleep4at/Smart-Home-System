@@ -47,16 +47,7 @@ const logs = useLogsStore();
 const filterSource = ref("");
 const filterLevel = ref("");
 
-const filteredLogs = computed(() => {
-  let list = logs.list;
-  if (filterSource.value) {
-    list = list.filter((l) => l.source === filterSource.value);
-  }
-  if (filterLevel.value) {
-    list = list.filter((l) => l.level === filterLevel.value);
-  }
-  return list;
-});
+const filteredLogs = computed(() => logs.list);
 
 function formatTime(timestamp: string) {
   const d = new Date(timestamp);
@@ -90,13 +81,19 @@ function formatData(data: Record<string, unknown>) {
 }
 
 function refreshLogs() {
-  logs.fetchLogs({ limit: 300 });
+  logs.fetchLogs({
+    limit: 300,
+    source: filterSource.value || undefined,
+    level: filterLevel.value || undefined,
+  });
 }
 
-watch([filterSource, filterLevel], () => {}, { immediate: false });
+watch([filterSource, filterLevel], () => {
+  refreshLogs();
+});
 
 onMounted(refreshLogs);
-const t = setInterval(refreshLogs, 3000);
+const t = setInterval(() => refreshLogs(), 3000);
 onUnmounted(() => clearInterval(t));
 </script>
 
