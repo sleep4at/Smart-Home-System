@@ -10,14 +10,23 @@ from .models import EmailAlertRule, SystemLog
 def send_email_alerts_for_value(device, field: str, value: float):
     """
     当设备上报的某字段值触发某条邮件规则时，发送邮件。
-    field: "temp" / "humi" / 等
-    value: 当前数值
+    field: "temp" / "humi" / "smoke" 等
+    value: 当前数值（烟雾为 1.0=触发 / 0.0=未触发）
     """
     rules = EmailAlertRule.objects.filter(
         enabled=True,
         trigger_device=device,
         trigger_field=field,
     ).select_related("trigger_device")
+
+    if field == "smoke" and not rules.exists():
+        SystemLog.objects.create(
+            level=SystemLog.LEVEL_INFO,
+            source="EMAIL_ALERT",
+            message=f"烟雾设备 [{device.name}] 触发告警，但未启用邮件告警规则（触发设备 ID={device.id}，trigger_field=smoke）",
+            data={"device_id": device.id, "device_name": device.name, "value": value},
+        )
+        return
 
     for rule in rules:
         # 烟雾告警：trigger_value 可为 None，视为 1（触发即发邮件）
@@ -36,6 +45,12 @@ def send_email_alerts_for_value(device, field: str, value: float):
             continue
 
         if not rule.recipients:
+            SystemLog.objects.create(
+                level=SystemLog.LEVEL_WARN,
+                source="EMAIL_ALERT",
+                message=f"告警规则「{rule.name}」未配置收件人，跳过发送",
+                data={"rule_id": rule.id},
+            )
             continue
 
         try:
