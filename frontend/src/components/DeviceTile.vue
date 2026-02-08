@@ -37,6 +37,22 @@
           {{ device.type_display }}
         </div>
       </div>
+      <div v-else-if="isLight" class="device-metrics">
+        <div class="metric-main">
+          {{ lightText }}
+        </div>
+        <div class="metric-sub">
+          {{ device.type_display }}
+        </div>
+      </div>
+      <div v-else-if="isPressure" class="device-metrics">
+        <div class="metric-main">
+          {{ pressureText }}
+        </div>
+        <div class="metric-sub">
+          {{ device.type_display }}
+        </div>
+      </div>
       <div v-else-if="isLampSwitch" class="device-metrics">
         <div class="metric-main">
           {{ switchLabel }}
@@ -49,6 +65,12 @@
         <div class="metric-main">{{ device.type_display }}</div>
         <div class="smoke-status" :class="smokeStatusClass">
           {{ smokeStatusText }}
+        </div>
+      </div>
+      <div v-else-if="isPir" class="device-metrics">
+        <div class="metric-main">{{ device.type_display }}</div>
+        <div class="pir-status" :class="pirStatusClass">
+          {{ pirStatusText }}
         </div>
       </div>
       <div v-else class="device-metrics">
@@ -157,11 +179,36 @@ const isAdmin = computed(() => auth.isAdmin);
 const isTempHumi = computed(() => props.device.type === "TEMP_HUMI");
 const isAC = computed(() => props.device.type === "AC_SWITCH");
 const isFan = computed(() => props.device.type === "FAN_SWITCH");
+const isLight = computed(() => props.device.type === "LIGHT");
+const isPressure = computed(() => props.device.type === "PRESSURE");
 const isLampSwitch = computed(() => props.device.type === "LAMP_SWITCH");
 const isSmoke = computed(() => props.device.type === "SMOKE");
+const isPir = computed(() => props.device.type === "PIR");
 const isSwitch = computed(() =>
   ["LAMP_SWITCH", "AC_SWITCH", "FAN_SWITCH"].includes(props.device.type)
 );
+
+/** 人体感应：根据 payload 的 motion / pir / value 判断是否已探测 */
+const pirDetected = computed(() => {
+  const s = props.device.current_state;
+  if (!s || typeof s !== "object") return false;
+  if (s.motion === true || s.pir === true) return true;
+  const v = s.value;
+  if (v !== undefined && v !== null) return Number(v) > 0;
+  return false;
+});
+
+/** 人体感应状态文案：离线固定「未探测」，在线按探测结果显示「未探测」/「已探测」 */
+const pirStatusText = computed(() => {
+  if (!props.device.is_online) return "未探测";
+  return pirDetected.value ? "已探测" : "未探测";
+});
+
+/** 人体感应状态样式类 */
+const pirStatusClass = computed(() => {
+  if (!props.device.is_online) return "pir-idle";
+  return pirDetected.value ? "pir-detected" : "pir-idle";
+});
 
 /** 烟雾传感器二值：根据 payload 的 smoke / alarm / value 判断是否触发 */
 const smokeTriggered = computed(() => {
@@ -202,6 +249,16 @@ const temperatureText = computed(() => {
 const humidityText = computed(() => {
   const h = props.device.current_state?.humi;
   return h !== undefined ? `${h}%RH` : "暂无湿度数据";
+});
+
+const lightText = computed(() => {
+  const l = props.device.current_state?.light;
+  return l !== undefined && l !== null ? `${l} Lux` : "暂无光照数据";
+});
+
+const pressureText = computed(() => {
+  const p = props.device.current_state?.pressure;
+  return p !== undefined && p !== null ? `${p} hPa` : "暂无气压数据";
 });
 
 const acTempText = computed(() => {
@@ -350,6 +407,23 @@ const setSpeed = async (speed: 1 | 2 | 3) => {
 .smoke-status.smoke-unknown {
   background: #f3f4f6;
   color: #6b7280;
+}
+
+.pir-status {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 4px;
+}
+.pir-status.pir-idle {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+.pir-status.pir-detected {
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 </style>
 
