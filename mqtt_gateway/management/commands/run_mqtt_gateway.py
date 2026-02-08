@@ -242,9 +242,9 @@ class Command(BaseCommand):
         if "speed" in payload:
             parts.append(f"档位 {payload['speed']}")
         if "light" in payload:
-            parts.append(f"光照 {payload['light']}")
+            parts.append(f"光照 {payload['light']}Lux")
         if "pressure" in payload:
-            parts.append(f"气压 {payload['pressure']}")
+            parts.append(f"气压 {payload['pressure']}hPa")
         for k, v in payload.items():
             if k in ("temp", "humi", "on", "speed", "light", "pressure"):
                 continue
@@ -292,57 +292,59 @@ class Command(BaseCommand):
                 if delta < rule.debounce_seconds:
                     continue
 
-            # 检查触发条件
-            trigger_field_value = payload.get(rule.trigger_field)
-            if trigger_field_value is None:
-                continue
-
-            try:
-                trigger_field_value = float(trigger_field_value)
-            except (ValueError, TypeError):
-                continue
-
             triggered = False
 
-            # 1. 阈值上限触发
-            if rule.trigger_type == SceneRule.TRIGGER_THRESHOLD_ABOVE:
-                threshold = float(rule.trigger_value) if isinstance(rule.trigger_value, (int, float)) else float(rule.trigger_value.get("value", 0))
-                triggered = trigger_field_value > threshold
-
-            # 2. 阈值下限触发
-            elif rule.trigger_type == SceneRule.TRIGGER_THRESHOLD_BELOW:
-                threshold = float(rule.trigger_value) if isinstance(rule.trigger_value, (int, float)) else float(rule.trigger_value.get("value", 0))
-                triggered = trigger_field_value < threshold
-
-            # 3. 区间外触发
-            elif rule.trigger_type == SceneRule.TRIGGER_RANGE_OUT:
-                if isinstance(rule.trigger_value, dict):
-                    min_val = float(rule.trigger_value.get("min", 0))
-                    max_val = float(rule.trigger_value.get("max", 0))
-                    triggered = trigger_field_value < min_val or trigger_field_value > max_val
-
-            # 4. 时间+状态组合触发
-            elif rule.trigger_type == SceneRule.TRIGGER_TIME_STATE:
-                # 检查时间范围
+            # 4. 定时触发（时间+可选状态条件）：不依赖 payload 数值，只要本设备有上报就检查时间与状态
+            if rule.trigger_type == SceneRule.TRIGGER_TIME_STATE:
                 time_match = False
                 if rule.trigger_time_start and rule.trigger_time_end:
                     if rule.trigger_time_start <= rule.trigger_time_end:
-                        # 正常范围（如 09:00-18:00）
                         time_match = rule.trigger_time_start <= current_time <= rule.trigger_time_end
                     else:
-                        # 跨天范围（如 23:00-02:00）
                         time_match = current_time >= rule.trigger_time_start or current_time <= rule.trigger_time_end
 
-                # 检查状态设备
                 state_match = True
                 if rule.trigger_state_device and rule.trigger_state_value:
                     device_state = rule.trigger_state_device.current_state or {}
                     for key, expected_value in rule.trigger_state_value.items():
-                        if device_state.get(key) != expected_value:
-                            state_match = False
+                        actual = device_state.get(key)
+                        if key in ("motion", "pir"):
+                            state_match = bool(actual) == bool(expected_value)
+                        elif key == "value":
+                            state_match = (actual is not None and (actual is True or (isinstance(actual, (int, float)) and float(actual) > 0))) == bool(expected_value)
+                        else:
+                            state_match = actual == expected_value
+                        if not state_match:
                             break
 
                 triggered = time_match and state_match
+
+            else:
+                # 阈值类触发：需要 payload 中含 trigger_field 且为数值
+                trigger_field_value = payload.get(rule.trigger_field)
+                if trigger_field_value is None:
+                    continue
+                try:
+                    trigger_field_value = float(trigger_field_value)
+                except (ValueError, TypeError):
+                    continue
+
+                # 1. 阈值上限触发
+                if rule.trigger_type == SceneRule.TRIGGER_THRESHOLD_ABOVE:
+                    threshold = float(rule.trigger_value) if isinstance(rule.trigger_value, (int, float)) else float(rule.trigger_value.get("value", 0))
+                    triggered = trigger_field_value > threshold
+
+                # 2. 阈值下限触发
+                elif rule.trigger_type == SceneRule.TRIGGER_THRESHOLD_BELOW:
+                    threshold = float(rule.trigger_value) if isinstance(rule.trigger_value, (int, float)) else float(rule.trigger_value.get("value", 0))
+                    triggered = trigger_field_value < threshold
+
+                # 3. 区间外触发
+                elif rule.trigger_type == SceneRule.TRIGGER_RANGE_OUT:
+                    if isinstance(rule.trigger_value, dict):
+                        min_val = float(rule.trigger_value.get("min", 0))
+                        max_val = float(rule.trigger_value.get("max", 0))
+                        triggered = trigger_field_value < min_val or trigger_field_value > max_val
 
             if triggered:
                 # 执行动作

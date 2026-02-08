@@ -69,6 +69,8 @@ function formatData(data: Record<string, unknown>) {
       .map(([k, v]) => {
         if (k === "temp" && v != null) return `温度 ${v}°C`;
         if (k === "humi" && v != null) return `湿度 ${v}%`;
+        if (k === "light" && v != null) return `光照 ${v}Lux`;
+        if (k === "pressure" && v != null) return `气压 ${v}hPa`;
         if (k === "on" && v != null) return v ? "开" : "关";
         if (k === "speed" && v != null) return `档位 ${v}`;
         return `${k}=${v}`;
