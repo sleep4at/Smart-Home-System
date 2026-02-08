@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
 烟雾传感器 (SMOKE) MQTT 模拟设备。
-上报字段：smoke（bool）或 alarm（bool）或 value（0/1），与网关邮件告警、前端「正常/警告」一致。
-配置从项目根目录 .env 读取（os.getenv）。
+仅通过键盘输入上报状态：输入「触发」类命令上报告警，输入「取消」类命令上报正常。
+上报字段：smoke / alarm / value，与网关、前端「正常/警告」一致。
 """
 
 import json
 import os
-import random
-import time
 
 import paho.mqtt.client as mqtt
 
@@ -25,9 +23,6 @@ MQTT_USERNAME = os.getenv("MQTT_USER") or None
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD") or None
 DEVICE_ID = 7
 TOPIC_PREFIX = os.getenv("MQTT_TOPIC_PREFIX", "home")
-
-PROB_ALARM = float(os.getenv("SIM_SMOKE_PROB_ALARM", "0.15"))
-STATE_INTERVAL_SEC = float(os.getenv("SIM_STATE_INTERVAL_SEC", "60.0"))
 # ================================
 
 
@@ -42,10 +37,11 @@ def main():
             return
         print(f"已连接 {MQTT_BROKER}:{MQTT_PORT}")
         client.publish(topic_lwt, "online", qos=1)
-        print("已发布 LWT: online")
+        client.publish(topic_state, json.dumps({"smoke": False, "alarm": False, "value": 0}), qos=1)
+        print("已发布 LWT: online，初始状态: 正常")
 
     def on_message(client, userdata, msg):
-        pass  # 烟雾传感器只读，不处理 cmd
+        pass
 
     client = mqtt.Client()
     if MQTT_USERNAME:
@@ -57,23 +53,35 @@ def main():
     client.loop_start()
     client.subscribe(topic_cmd, qos=1)
 
+    trigger_keywords = {"1", "触发", "报警", "告警", "on", "alarm", "y", "yes"}
+    normal_keywords = {"0", "正常", "取消", "关闭", "off", "normal", "n", "no"}
+
+    print("键盘控制：输入「1/触发/报警」上报告警 → 磁贴显示警告；输入「0/正常/取消」上报正常；输入 q 退出")
+
     try:
         while True:
-            triggered = random.random() < PROB_ALARM
-            # 与网关、前端一致：smoke / alarm / value
-            payload = {
-                "smoke": triggered,
-                "alarm": triggered,
-                "value": 1 if triggered else 0,
-            }
-            client.publish(topic_state, json.dumps(payload), qos=1)
-            print(f"上报 state: {'警告' if triggered else '正常'} {payload}")
-            time.sleep(STATE_INTERVAL_SEC)
-    except KeyboardInterrupt:
-        client.publish(topic_lwt, "offline", qos=1)
-        client.loop_stop()
-        client.disconnect()
-        print("已退出")
+            line = input("> ").strip()
+            if not line:
+                continue
+            t, t_lower = line, line.lower()
+            if t_lower in ("q", "quit"):
+                break
+            if t_lower in trigger_keywords or t in trigger_keywords:
+                payload = {"smoke": True, "alarm": True, "value": 1}
+                client.publish(topic_state, json.dumps(payload), qos=1)
+                print("  -> 已上报: 警告（告警）", payload)
+            elif t_lower in normal_keywords or t in normal_keywords:
+                payload = {"smoke": False, "alarm": False, "value": 0}
+                client.publish(topic_state, json.dumps(payload), qos=1)
+                print("  -> 已上报: 正常", payload)
+            else:
+                print("  未知命令。请输入 1/触发/报警 或 0/正常/取消")
+    except (KeyboardInterrupt, EOFError):
+        pass
+    client.publish(topic_lwt, "offline", qos=1)
+    client.loop_stop()
+    client.disconnect()
+    print("已退出")
 
 
 if __name__ == "__main__":
