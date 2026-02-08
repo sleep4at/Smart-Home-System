@@ -27,7 +27,10 @@ class SystemLogViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
             qs = qs.filter(level=level)
         source = self.request.query_params.get("source")
         if source:
-            qs = qs.filter(source=source)
+            if source == "ALERT":
+                qs = qs.filter(source__in=["ALERT", "EMAIL_ALERT"])
+            else:
+                qs = qs.filter(source=source)
 
         if user.is_staff or user.is_superuser:
             pass
