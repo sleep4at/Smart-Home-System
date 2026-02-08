@@ -51,12 +51,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "设备管理" },
       },
       {
-        path: "alerts",
-        name: "admin-alerts",
-        component: () => import("@/views/admin/AlertsView.vue"),
-        meta: { title: "安全告警" },
-      },
-      {
         path: "email-alerts",
         name: "admin-email-alerts",
         component: () => import("@/views/admin/EmailAlertsView.vue"),
