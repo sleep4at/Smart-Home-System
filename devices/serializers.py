@@ -48,11 +48,13 @@ class DeviceHistoryQuerySerializer(serializers.Serializer):
     校验 /api/devices/{id}/history/ 的 query 参数。
     """
 
+    RANGE_6H = "6h"
     RANGE_24H = "24h"
     RANGE_3D = "3d"
     RANGE_7D = "7d"
 
     RANGE_CHOICES = (
+        (RANGE_6H, "6小时"),
         (RANGE_24H, "24小时"),
         (RANGE_3D, "3天"),
         (RANGE_7D, "7天"),
@@ -68,7 +70,9 @@ class DeviceHistoryQuerySerializer(serializers.Serializer):
         """
         range_value = self.validated_data.get("range") or self.RANGE_24H
         now = timezone.now()
-        if range_value == self.RANGE_3D:
+        if range_value == self.RANGE_6H:
+            delta = timezone.timedelta(hours=6)
+        elif range_value == self.RANGE_3D:
             delta = timezone.timedelta(days=3)
         elif range_value == self.RANGE_7D:
             delta = timezone.timedelta(days=7)

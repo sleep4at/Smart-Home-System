@@ -153,7 +153,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
 
 class DeviceHistoryView(APIView):
     """
-    /api/devices/{id}/history/?range=24h|3d|7d
+    /api/devices/{id}/history/?range=6h|24h|3d|7d
     返回设备历史数据，用于前端画图。
     """
 

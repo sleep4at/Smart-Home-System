@@ -21,6 +21,7 @@
           </option>
         </select>
         <select v-model="selectedRange" class="field-select" style="width: 120px;">
+          <option value="6h">6小时</option>
           <option value="24h">24小时</option>
           <option value="3d">3天</option>
           <option value="7d">7天</option>
@@ -40,12 +41,13 @@
 import { computed, ref, watch, onMounted, onUnmounted } from "vue";
 import { use } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
-import { LineChart } from "echarts/charts";
+import { LineChart, BarChart } from "echarts/charts";
 import {
   TitleComponent,
   TooltipComponent,
   LegendComponent,
   GridComponent,
+  DataZoomComponent,
 } from "echarts/components";
 import VChart from "vue-echarts";
 import api from "@/utils/http";
@@ -54,15 +56,17 @@ import { useDevicesStore } from "@/store/devices";
 use([
   CanvasRenderer,
   LineChart,
+  BarChart,
   TitleComponent,
   TooltipComponent,
   LegendComponent,
   GridComponent,
+  DataZoomComponent,
 ]);
 
 const devices = useDevicesStore();
 const selectedDeviceId = ref<number>(0);
-const selectedRange = ref<string>("24h");
+const selectedRange = ref<string>("6h");
 const chartData = ref<{ timestamp: string; data: Record<string, unknown> }[]>([]);
 
 const isRefreshing = ref(false);
@@ -133,96 +137,108 @@ const chartOption = computed(() => {
     return {
       title: { text: `${device.name} - 温湿度历史`, left: "center" },
       tooltip: { trigger: "axis" },
-      legend: { data: ["温度(°C)", "湿度(%RH)"], bottom: 0 },
-      grid: { left: "3%", right: "4%", bottom: "15%", containLabel: true },
-      // xAxis: { type: "category", data: times, boundaryGap: false },
-      xAxis: { type: "time", boundaryGap: false,
+      legend: { data: ["温度(°C)", "湿度(%RH)"], bottom: "2%" },
+      grid: { left: "3%", right: "4%", bottom: "22%", containLabel: true },
+      xAxis: {
+        type: "time",
+        boundaryGap: false,
         axisLabel: {
           formatter: (value: number) => {
             const date = new Date(value);
-          return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-          }
-        }
+            return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+          },
+        },
       },
       yAxis: [
         { type: "value", name: "温度(°C)", position: "left" },
         { type: "value", name: "湿度(%RH)", position: "right" },
       ],
+      dataZoom: [
+        { type: "inside", xAxisIndex: 0, start: 0, end: 100 },
+        { type: "slider", xAxisIndex: 0, start: 0, end: 100, bottom: "2%" },
+      ],
       series: [
-      { 
-        name: "温度(°C)", 
-        type: "line", 
-        data: temperatures, // 现在是二维数组
-        smooth: true, 
-        showSymbol: true, // 建议关闭数据点，在大跨度下更好看
-        itemStyle: { color: "#ef4444" } 
-      },
-      { 
-        name: "湿度(%RH)", 
-        type: "line", 
-        yAxisIndex: 1, 
-        data: humidities, 
-        smooth: true, 
-        showSymbol: true,
-        itemStyle: { color: "#3b82f6" } 
-      },
-    ],
-      // series: [
-      //   { name: "温度(°C)", type: "line", data: temperatures, smooth: true, itemStyle: { color: "#ef4444" } },
-      //   { name: "湿度(%RH)", type: "line", yAxisIndex: 1, data: humidities, smooth: true, itemStyle: { color: "#3b82f6" } },
-      // ],
+        { name: "温度(°C)", type: "line", data: temperatures, smooth: true, showSymbol: false, itemStyle: { color: "#ef4444" } },
+        { name: "湿度(%RH)", type: "line", yAxisIndex: 1, data: humidities, smooth: true, showSymbol: false, itemStyle: { color: "#3b82f6" } },
+      ],
     };
   }
   if (isSwitch) {
     const states = chartData.value.map((p) => [new Date(p.timestamp).getTime(), p.data?.on ? 1 : 0]);
-    // const states = chartData.value.map((p) => ((p.data?.on as boolean) ? 1 : 0));
     return {
       title: { text: `${device.name} - 开关状态历史`, left: "center" },
-      tooltip: { trigger: "axis" },
-      grid: { left: "3%", right: "4%", bottom: "15%", containLabel: true },
-      // xAxis: { type: "category", data: times, boundaryGap: false },
-      xAxis: { 
-      type: "time", 
-      boundaryGap: false,
-      axisLabel: {
-        formatter: (value: number) => {
-          const date = new Date(value);
-          return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-        }
-      }
-    },
+      tooltip: {
+        trigger: "axis",
+        formatter: (params: any) => {
+          const p = params?.[0];
+          if (!p?.data) return "";
+          const t = Array.isArray(p.data) ? p.data[0] : p.data;
+          const v = Array.isArray(p.data) ? p.data[1] : p.data;
+          const timeStr = typeof t === "number" ? new Date(t).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+          return `${timeStr}<br/>状态：${v === 1 ? "开启" : "关闭"}`;
+        },
+      },
+      grid: { left: "3%", right: "4%", bottom: "22%", containLabel: true },
+      xAxis: {
+        type: "time",
+        boundaryGap: true,
+        axisLabel: {
+          formatter: (value: number) => {
+            const date = new Date(value);
+            return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+          },
+        },
+      },
       yAxis: {
         type: "value",
         min: 0,
         max: 1,
+        interval: 1,
+        splitNumber: 1,
         name: "状态",
-        axisLabel: { formatter: (value: number) => (value === 1 ? "开启" : "关闭") },
+        axisLabel: {
+          formatter: (value: number) => (value === 1 ? "开启" : value === 0 ? "关闭" : ""),
+        },
       },
+      dataZoom: [
+        { type: "inside", xAxisIndex: 0, start: 0, end: 100 },
+        { type: "slider", xAxisIndex: 0, start: 0, end: 100, bottom: "2%" },
+      ],
       series: [
-        { name: "开关状态", type: "line", step: "start", data: states, itemStyle: { color: "#16a34a" }, areaStyle: {} },
+        {
+          name: "开关状态",
+          type: "bar",
+          data: states,
+          barMaxWidth: 24,
+          itemStyle: {
+            color: (params: any) => (Array.isArray(params.data) && params.data[1] === 1 ? "#16a34a" : "#94a3b8"),
+          },
+        },
       ],
     };
   }
   const firstKey = chartData.value[0]?.data ? Object.keys(chartData.value[0].data)[0] : null;
   if (!firstKey) return {};
   const values = chartData.value.map((p) => [new Date(p.timestamp).getTime(), (p.data?.[firstKey] as number) ?? null]);
-  // const values = chartData.value.map((p) => (p.data?.[firstKey] as number) ?? null);
   return {
     title: { text: `${device.name} - ${firstKey}历史`, left: "center" },
     tooltip: { trigger: "axis" },
-    grid: { left: "3%", right: "4%", bottom: "15%", containLabel: true },
-    // xAxis: { type: "category", data: times, boundaryGap: false },
-    xAxis: { 
-      type: "time", 
+    grid: { left: "3%", right: "4%", bottom: "22%", containLabel: true },
+    xAxis: {
+      type: "time",
       boundaryGap: false,
       axisLabel: {
         formatter: (value: number) => {
           const date = new Date(value);
           return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-        }
-      }
+        },
+      },
     },
     yAxis: { type: "value" },
+    dataZoom: [
+      { type: "inside", xAxisIndex: 0, start: 0, end: 100 },
+      { type: "slider", xAxisIndex: 0, start: 0, end: 100, bottom: "2%" },
+    ],
     series: [{ name: firstKey, type: "line", data: values, smooth: true, itemStyle: { color: "#2563eb" } }],
   };
 });
@@ -236,7 +252,7 @@ onMounted(async () => {
     await fetchHistory();
   }
 
-  // 每 30 秒自动执行一次获取数据的函数
+  // 每 15 秒自动执行一次获取数据的函数
   timer = setInterval(() => {
     // 只有当用户选了设备时才自动刷新，避免无效请求
     if (selectedDeviceId.value !== 0) {
