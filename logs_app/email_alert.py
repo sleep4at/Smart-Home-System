@@ -19,13 +19,15 @@ def send_email_alerts_for_value(device, field: str, value: float):
         trigger_field=field,
     ).select_related("trigger_device")
 
+    # 仅当烟雾实际触发（value >= 1）且没有匹配规则时再记录日志，避免未触发时误报
     if field == "smoke" and not rules.exists():
-        SystemLog.objects.create(
-            level=SystemLog.LEVEL_INFO,
-            source="EMAIL_ALERT",
-            message=f"烟雾设备 [{device.name}] 触发告警，但未启用邮件告警规则（触发设备 ID={device.id}，trigger_field=smoke）",
-            data={"device_id": device.id, "device_name": device.name, "value": value},
-        )
+        if value >= 1.0:
+            SystemLog.objects.create(
+                level=SystemLog.LEVEL_INFO,
+                source="EMAIL_ALERT",
+                message=f"烟雾设备 [{device.name}] 触发告警，但未找到匹配的邮件告警规则（触发设备 ID={device.id}，trigger_field=smoke）",
+                data={"device_id": device.id, "device_name": device.name, "value": value},
+            )
         return
 
     for rule in rules:
