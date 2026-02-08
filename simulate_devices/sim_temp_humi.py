@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""
+温湿度传感器 (TEMP_HUMI) MQTT 模拟设备。
+上报字段：temp（温度 °C）, humi（湿度 %RH），与网关、前端、告警逻辑一致。
+配置从项目根目录 .env 读取，使用 os.getenv；未设置时使用下列默认值。
+"""
+
+import json
+import os
+import random
+import time
+
+import paho.mqtt.client as mqtt
+
+try:
+    from _env import load_dotenv_from_project_root
+    load_dotenv_from_project_root()
+except Exception:
+    pass
+
+# ========== 配置（环境变量优先，来自项目根目录 .env）==========
+MQTT_BROKER = os.getenv("MQTT_HOST", "127.0.0.1")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_USERNAME = os.getenv("MQTT_USER") or None
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD") or None
+DEVICE_ID = 1
+TOPIC_PREFIX = os.getenv("MQTT_TOPIC_PREFIX", "home")
+
+TEMP_MIN = float(os.getenv("SIM_TEMP_MIN", "18.0"))
+TEMP_MAX = float(os.getenv("SIM_TEMP_MAX", "32.0"))
+HUMI_MIN = float(os.getenv("SIM_HUMI_MIN", "40.0"))
+HUMI_MAX = float(os.getenv("SIM_HUMI_MAX", "95.0"))
+STATE_INTERVAL_SEC = float(os.getenv("SIM_STATE_INTERVAL_SEC", "60.0"))
+# ================================
+
+
+def main():
+    topic_state = f"{TOPIC_PREFIX}/{DEVICE_ID}/state"
+    topic_lwt = f"{TOPIC_PREFIX}/{DEVICE_ID}/lwt"
+    topic_cmd = f"{TOPIC_PREFIX}/{DEVICE_ID}/cmd"
+
+    def on_connect(client, userdata, flags, rc):
+        if rc != 0:
+            print(f"连接失败 rc={rc}")
+            return
+        print(f"已连接 {MQTT_BROKER}:{MQTT_PORT}")
+        client.publish(topic_lwt, "online", qos=1)
+        print("已发布 LWT: online")
+
+    def on_message(client, userdata, msg):
+        pass  # 温湿度为只读传感器，不处理 cmd
+
+    client = mqtt.Client()
+    if MQTT_USERNAME:
+        client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD or "")
+    client.will_set(topic_lwt, "offline", qos=1, retain=False)
+    client.on_connect = on_connect
+    client.on_message = on_message
+    client.connect(MQTT_BROKER, MQTT_PORT, 60)
+    client.loop_start()
+    client.subscribe(topic_cmd, qos=1)
+
+    try:
+        while True:
+            temp = round(random.uniform(TEMP_MIN, TEMP_MAX), 1)
+            humi = round(random.uniform(HUMI_MIN, HUMI_MAX), 1)
+            payload = {"temp": temp, "humi": humi}
+            client.publish(topic_state, json.dumps(payload), qos=1)
+            print(f"上报 state: {payload}")
+            time.sleep(STATE_INTERVAL_SEC)
+    except KeyboardInterrupt:
+        client.publish(topic_lwt, "offline", qos=1)
+        client.loop_stop()
+        client.disconnect()
+        print("已退出")
+
+
+if __name__ == "__main__":
+    main()
