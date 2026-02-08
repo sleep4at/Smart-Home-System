@@ -61,6 +61,11 @@ export const useAuthStore = defineStore("auth", {
       this.user = null;
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
+    },
+    /** 仅更新 access token（用于 token 刷新后），由 http 拦截器调用 */
+    setAccessToken(access: string) {
+      this.accessToken = access;
+      localStorage.setItem("accessToken", access);
     }
   }
 });
