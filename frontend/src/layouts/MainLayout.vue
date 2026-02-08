@@ -11,6 +11,10 @@
               {{ auth.isAdmin ? "管理员" : "普通用户" }}
             </span>
             ）
+            <span class="mqtt-indicator" :class="mqtt.connected ? 'connected' : 'disconnected'">
+              <span class="mqtt-dot" />
+              {{ mqtt.loading ? "检查中…" : (mqtt.connected ? "MQTT 已连接" : "MQTT 未连接") }}
+            </span>
           </div>
         </div>
         <div style="display: flex; gap: 8px;">
@@ -34,11 +38,13 @@ import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Sidebar from "@/components/Sidebar.vue";
 import { useAuthStore } from "@/store/auth";
+import { useMqttStatusStore } from "@/store/mqttStatus";
 
 const collapsed = ref(false);
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const mqtt = useMqttStatusStore();
 
 const pageTitle = computed(() => (route.meta.title as string) || "主页");
 
@@ -48,3 +54,37 @@ const onLogout = () => {
   router.push({ name: "login" });
 };
 </script>
+
+<style scoped>
+.mqtt-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--mqtt-bg, #f3f4f6);
+  color: var(--mqtt-fg, #6b7280);
+}
+.mqtt-indicator.connected {
+  --mqtt-bg: #ecfdf5;
+  --mqtt-fg: #059669;
+}
+.mqtt-indicator.disconnected {
+  --mqtt-bg: #fef2f2;
+  --mqtt-fg: #dc2626;
+}
+.mqtt-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.mqtt-indicator.connected .mqtt-dot {
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.3);
+}
+.mqtt-indicator.disconnected .mqtt-dot {
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.3);
+}
+</style>
