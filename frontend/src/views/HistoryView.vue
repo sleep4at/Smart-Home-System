@@ -268,7 +268,7 @@ onMounted(async () => {
     if (selectedDeviceId.value !== 0) {
       fetchHistory();
     }
-  }, 15000); // 15000 毫秒 = 15 秒
+  }, 30000); // 30000 毫秒 = 30 秒
 });
 
 onUnmounted(() => {
