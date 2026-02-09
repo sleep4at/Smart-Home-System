@@ -1,5 +1,5 @@
 <template>
-  <div class="app-shell">
+  <div class="app-shell app-shell-fixed">
     <AdminSidebar :collapsed="collapsed" @toggle="collapsed = !collapsed" />
     <main class="app-main">
       <header class="app-main-header">
@@ -12,7 +12,9 @@
           <button class="btn btn-ghost" @click="onLogout">退出登录</button>
         </div>
       </header>
-      <router-view />
+      <div class="app-main-content">
+        <router-view />
+      </div>
     </main>
   </div>
 </template>
