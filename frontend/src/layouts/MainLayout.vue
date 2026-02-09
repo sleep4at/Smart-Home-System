@@ -25,11 +25,13 @@
           >
             管理设置
           </button>
+          <button class="btn btn-ghost" @click="showProfile = true">个人信息</button>
           <button class="btn btn-ghost" @click="onLogout">退出登录</button>
         </div>
       </header>
       <router-view />
     </main>
+    <ProfileDialog v-if="showProfile" @close="showProfile = false" />
   </div>
 </template>
 
@@ -37,10 +39,12 @@
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Sidebar from "@/components/Sidebar.vue";
+import ProfileDialog from "@/components/ProfileDialog.vue";
 import { useAuthStore } from "@/store/auth";
 import { useMqttStatusStore } from "@/store/mqttStatus";
 
 const collapsed = ref(false);
+const showProfile = ref(false);
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();

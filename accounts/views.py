@@ -1,10 +1,10 @@
 from django.contrib.auth import get_user_model
 from rest_framework import mixins, viewsets
-from rest_framework.generics import RetrieveAPIView
+from rest_framework.generics import RetrieveUpdateAPIView
 from rest_framework.permissions import IsAuthenticated
 
 from .permissions import IsAdminUserRole
-from .serializers import MeSerializer, UserSerializer
+from .serializers import MeSerializer, MeUpdateSerializer, UserSerializer
 
 
 User = get_user_model()
@@ -26,14 +26,18 @@ class UserViewSet(
     permission_classes = [IsAuthenticated & IsAdminUserRole]
 
 
-class MeView(RetrieveAPIView):
+class MeView(RetrieveUpdateAPIView):
     """
-    返回当前登录用户信息，供前端判断是否管理员等。
+    当前用户信息：GET 返回资料，PATCH 允许修改邮箱与密码。
     """
 
-    serializer_class = MeSerializer
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
         return self.request.user
+
+    def get_serializer_class(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return MeUpdateSerializer
+        return MeSerializer
 
