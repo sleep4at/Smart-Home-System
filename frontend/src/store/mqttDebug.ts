@@ -177,6 +177,18 @@ export const useMqttDebugStore = defineStore("mqttDebug", {
         beforeUnloadHandler = null;
       }
     },
+    /** 连接过程中取消，可重新修改参数再连 */
+    cancelConnect() {
+      this.clearConnectTimeout();
+      if (client) {
+        try {
+          client.end(true);
+        } catch (_) {}
+        client = null;
+      }
+      this.connecting = false;
+      this.connError = "已取消连接";
+    },
     disconnect() {
       this.clearConnectTimeout();
       this._removeBeforeUnload();

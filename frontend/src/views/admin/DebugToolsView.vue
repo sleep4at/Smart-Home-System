@@ -118,13 +118,16 @@
         </div>
         <div class="form-row form-row-actions">
           <button
-            v-if="!connected"
+            v-if="!connected && !connecting"
             class="btn btn-primary"
-            :disabled="connecting"
             @click="connect"
           >
-            {{ connecting ? "连接中…" : "连接" }}
+            连接
           </button>
+          <template v-else-if="connecting">
+            <button class="btn btn-primary" disabled>连接中…</button>
+            <button class="btn btn-ghost" @click="cancelConnect">取消连接</button>
+          </template>
           <button v-else class="btn btn-ghost" @click="disconnect">断开连接</button>
           <span v-if="connected" class="status connected">已连接</span>
           <span v-else-if="connError" class="status error">{{ connError }}</span>
@@ -293,6 +296,7 @@ watch(
 );
 
 const connect = () => store.connect();
+const cancelConnect = () => store.cancelConnect();
 const disconnect = () => store.disconnect();
 const subscribe = () => store.subscribe();
 const unsubscribe = (topic: string) => store.unsubscribe(topic);
