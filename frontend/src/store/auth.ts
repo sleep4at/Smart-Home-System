@@ -79,6 +79,25 @@ export const useAuthStore = defineStore("auth", {
     setAccessToken(access: string) {
       this.accessToken = access;
       authStorage.setItem(AUTH_STORAGE_KEY_ACCESS, access);
+    },
+    /**
+     * 用 /api/auth/me/ 校验当前 token 是否仍有效（例如后端重启后可能失效）。
+     * @returns true 仍有效，false 已清除登录态（请求 401 或失败）
+     */
+    async revalidate(): Promise<boolean> {
+      if (!this.accessToken) return true;
+      try {
+        const res = await api.get<UserInfo>("/api/auth/me/");
+        this.user = res.data;
+        return true;
+      } catch {
+        this.accessToken = null;
+        this.refreshToken = null;
+        this.user = null;
+        authStorage.removeItem(AUTH_STORAGE_KEY_ACCESS);
+        authStorage.removeItem(AUTH_STORAGE_KEY_REFRESH);
+        return false;
+      }
     }
   }
 });
