@@ -28,8 +28,9 @@ class Command(BaseCommand):
 
         def on_connect(client, userdata, flags, rc):
             if rc == 0:
+                transport = "mqtts (TLS)" if config.get("USE_TLS") else "mqtt (no TLS)"
                 self.stdout.write(
-                    self.style.SUCCESS(f"MQTT 已连接: {config['HOST']}:{config['PORT']}")
+                    self.style.SUCCESS(f"MQTT 已连接: {config['HOST']}:{config['PORT']} [{transport}]")
                 )
                 # 设备状态上报
                 client.subscribe(f"{topic_prefix}/+/state", qos=1)
@@ -85,9 +86,10 @@ class Command(BaseCommand):
                     device.save(update_fields=["is_online", "updated_at"])
 
                     if is_online:
-                        lwt_msg = f"设备 [{device.name}] 已上线"
+                        tls_label = " (TLS)" if config.get("USE_TLS") else " (no TLS)"
+                        lwt_msg = f"设备 [{device.name}] 已上线{tls_label}"
                     else:
-                        lwt_msg = f"警告：设备 [{device.name}] 异常离线"
+                        lwt_msg = f"警告：设备 [{device.name}] 离线"
                     SystemLog.objects.create(
                         level=SystemLog.LEVEL_WARN if not is_online else SystemLog.LEVEL_INFO,
                         source="MQTT_LWT",
@@ -216,6 +218,11 @@ class Command(BaseCommand):
         client = mqtt.Client()
         if config.get("USERNAME"):
             client.username_pw_set(config["USERNAME"], config.get("PASSWORD", ""))
+
+        # TLS / mqtts
+        from mqtt_gateway.utils import _apply_tls
+        _apply_tls(client, config)
+
         client.on_connect = on_connect
         client.on_message = on_message
         try:

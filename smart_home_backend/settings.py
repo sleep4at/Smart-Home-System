@@ -192,6 +192,12 @@ MQTT_CONFIG = {
     'PASSWORD': os.getenv('MQTT_PASSWORD'),
     'KEEPALIVE': 60,
     'TOPIC_PREFIX': 'home',
+    # TLS / mqtts
+    'USE_TLS': os.getenv('MQTT_USE_TLS', 'False').lower() in ('true', '1', 'yes'),
+    'CA_CERTS': os.getenv('MQTT_CA_CERTS') or None,
+    'CERTFILE': os.getenv('MQTT_CERTFILE') or None,
+    'KEYFILE': os.getenv('MQTT_KEYFILE') or None,
+    'TLS_INSECURE': os.getenv('MQTT_TLS_INSECURE', 'False').lower() in ('true', '1', 'yes'),
 }
 
 # ==== Email ====

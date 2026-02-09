@@ -13,10 +13,11 @@ import time
 import paho.mqtt.client as mqtt
 
 try:
-    from _env import load_dotenv_from_project_root
+    from _env import load_dotenv_from_project_root, apply_tls, mqtt_transport_label
     load_dotenv_from_project_root()
 except Exception:
-    pass
+    apply_tls = None
+    mqtt_transport_label = lambda: "mqtt (明文)"
 
 # ========== 配置（环境变量，来自 .env）==========
 MQTT_BROKER = os.getenv("MQTT_HOST", "127.0.0.1")
@@ -51,6 +52,9 @@ def main():
     client = mqtt.Client()
     if MQTT_USERNAME:
         client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD or "")
+    if apply_tls:
+        apply_tls(client)
+    print(f"连接模式: {mqtt_transport_label()}")
     client.will_set(topic_lwt, "offline", qos=1, retain=False)
     client.on_connect = on_connect
     client.on_message = on_message
