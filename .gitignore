@@ -16,6 +16,9 @@ __pycache__/
 .env
 db.sqlite3
 
+# 证书与私钥
+certs/
+
 # 开发工具
 .vscode/
 .cursor/
