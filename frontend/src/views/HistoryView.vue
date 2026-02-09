@@ -164,6 +164,7 @@ const chartOption = computed(() => {
     };
   }
   if (isSwitch) {
+    // 方波：每个点 [时间戳, 0|1]，步进线使状态在时间上持续为水平线段，仅在切换时竖变
     const states = chartData.value.map((p) => [new Date(p.timestamp).getTime(), p.data?.on ? 1 : 0]);
     return {
       title: { text: `${device.name} - 开关状态历史`, left: "center" },
@@ -181,7 +182,7 @@ const chartOption = computed(() => {
       grid: { left: "3%", right: "4%", bottom: "22%", containLabel: true },
       xAxis: {
         type: "time",
-        boundaryGap: true,
+        boundaryGap: false,
         axisLabel: {
           formatter: (value: number) => {
             const date = new Date(value);
@@ -200,6 +201,14 @@ const chartOption = computed(() => {
           formatter: (value: number) => (value === 1 ? "开启" : value === 0 ? "关闭" : ""),
         },
       },
+      visualMap: {
+        show: false,
+        dimension: 1,
+        pieces: [
+          { value: 0, color: "#94a3b8" },
+          { value: 1, color: "#16a34a" },
+        ],
+      },
       dataZoom: [
         { type: "inside", xAxisIndex: 0, start: 0, end: 100 },
         { type: "slider", xAxisIndex: 0, start: 0, end: 100, bottom: "2%" },
@@ -207,12 +216,13 @@ const chartOption = computed(() => {
       series: [
         {
           name: "开关状态",
-          type: "bar",
+          type: "line",
           data: states,
-          barMaxWidth: 24,
-          itemStyle: {
-            color: (params: any) => (Array.isArray(params.data) && params.data[1] === 1 ? "#16a34a" : "#94a3b8"),
-          },
+          step: "start",
+          showSymbol: false,
+          lineStyle: { width: 2 },
+          areaStyle: { opacity: 0.35 },
+          symbol: "none",
         },
       ],
     };
