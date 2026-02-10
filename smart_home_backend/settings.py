@@ -209,3 +209,25 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS') == 'True'
 EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL') == 'True'
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
+
+# ==== Energy（估算能耗） ====
+
+# 固定电价（元/kWh）
+ENERGY_PRICE_PER_KWH = float(os.getenv('ENERGY_PRICE_PER_KWH', '0.66'))
+
+# 设备功率估算参数（W）
+ENERGY_POWER_PROFILE = {
+    # 灯具开关
+    'LAMP_ON_W': float(os.getenv('ENERGY_LAMP_ON_W', '9')),
+    # 风扇档位
+    'FAN_SPEED_1_W': float(os.getenv('ENERGY_FAN_SPEED_1_W', '30')),
+    'FAN_SPEED_2_W': float(os.getenv('ENERGY_FAN_SPEED_2_W', '45')),
+    'FAN_SPEED_3_W': float(os.getenv('ENERGY_FAN_SPEED_3_W', '60')),
+    # 空调：按温度做线性估算并做上下限夹取
+    'AC_BASE_W': float(os.getenv('ENERGY_AC_BASE_W', '900')),
+    'AC_TEMP_STEP_W': float(os.getenv('ENERGY_AC_TEMP_STEP_W', '25')),
+    'AC_MIN_W': float(os.getenv('ENERGY_AC_MIN_W', '500')),
+    'AC_MAX_W': float(os.getenv('ENERGY_AC_MAX_W', '1500')),
+    # 传感器待机功耗（可选）
+    'SENSOR_IDLE_W': float(os.getenv('ENERGY_SENSOR_IDLE_W', '0.5')),
+}

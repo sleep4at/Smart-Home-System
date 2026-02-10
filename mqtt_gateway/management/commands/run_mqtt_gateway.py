@@ -34,9 +34,13 @@ class Command(BaseCommand):
                 )
                 # 设备状态上报
                 client.subscribe(f"{topic_prefix}/+/state", qos=1)
+                # 设备电参上报（功率/累计电量）
+                client.subscribe(f"{topic_prefix}/+/power", qos=1)
                 # LWT / 在线状态主题（约定为 lwt，可按需调整）
                 client.subscribe(f"{topic_prefix}/+/lwt", qos=1)
-                self.stdout.write(f"已订阅: {topic_prefix}/+/state, {topic_prefix}/+/lwt")
+                self.stdout.write(
+                    f"已订阅: {topic_prefix}/+/state, {topic_prefix}/+/power, {topic_prefix}/+/lwt"
+                )
             else:
                 self.stdout.write(self.style.ERROR(f"MQTT 连接失败 rc={rc}"))
 
@@ -78,8 +82,10 @@ class Command(BaseCommand):
                 except json.JSONDecodeError:
                     payload = raw_payload
 
+                suffix_lower = suffix.lower()
+
                 # LWT / 在线离线状态处理
-                if suffix.lower() == "lwt":
+                if suffix_lower == "lwt":
                     text = payload if isinstance(payload, str) else str(payload)
                     is_online = text.lower() not in ("offline", "0", "false")
                     device.is_online = is_online
@@ -96,6 +102,19 @@ class Command(BaseCommand):
                         message=lwt_msg,
                         data={"topic": topic, "payload": text, "device_id": device_id},
                         user=device.owner,
+                    )
+                    return
+
+                # 电参上报：例如 home/{id}/power -> {"power_w": 123.4, "energy_wh_total": 4567.8}
+                if suffix_lower == "power":
+                    self._handle_power_report(device=device, topic=topic, payload=payload)
+                    return
+
+                if suffix_lower != "state":
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"未知主题后缀: {suffix}（仅支持 state / power / lwt）"
+                        )
                     )
                     return
 
@@ -259,6 +278,50 @@ class Command(BaseCommand):
         if not parts:
             return f"设备 [{device_name}]({device_id}) 状态已更新"
         return f"设备 [{device_name}] 上报：{', '.join(parts)}"
+
+    def _handle_power_report(self, device: Device, topic: str, payload):
+        """
+        处理 home/{id}/power 电参上报。
+        支持字段：
+          - power_w 或 power（W）
+          - energy_wh_total（Wh，累计电量，可选）
+        """
+        if isinstance(payload, (int, float)):
+            payload = {"power_w": float(payload)}
+        if not isinstance(payload, dict):
+            self.stdout.write(
+                self.style.WARNING(f"忽略非法 power payload（非 JSON 对象）: {payload}")
+            )
+            return
+
+        raw_power = payload.get("power_w", payload.get("power"))
+        try:
+            power_w = max(0.0, float(raw_power))
+        except (TypeError, ValueError):
+            self.stdout.write(self.style.WARNING(f"忽略非法功率字段: {raw_power}"))
+            return
+
+        power_data = {"power_w": round(power_w, 3)}
+        raw_energy = payload.get("energy_wh_total")
+        if raw_energy is not None:
+            try:
+                power_data["energy_wh_total"] = round(max(0.0, float(raw_energy)), 3)
+            except (TypeError, ValueError):
+                pass
+
+        # 合并到 current_state，供设备详情与能耗估算使用
+        state = (device.current_state or {}).copy()
+        state.update(power_data)
+        device.current_state = state
+        device.is_online = True
+        device.save(update_fields=["current_state", "is_online", "updated_at"])
+
+        # 记录历史功率点（不写 SystemLog，避免高频上报刷屏）
+        DeviceData.objects.create(
+            device=device,
+            timestamp=timezone.now(),
+            data=power_data,
+        )
 
     def _format_action_desc(self, action_device_name: str, action_type: str, action_payload: dict) -> str:
         """格式化为场景联动描述。"""

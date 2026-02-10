@@ -80,3 +80,27 @@ class DeviceHistoryQuerySerializer(serializers.Serializer):
             delta = timezone.timedelta(hours=24)
         return now - delta, now
 
+
+class EnergyAnalysisQuerySerializer(serializers.Serializer):
+    """
+    校验 /api/energy/analysis/ 的 query 参数。
+    """
+
+    RANGE_6H = "6h"
+    RANGE_24H = "24h"
+    RANGE_3D = "3d"
+    RANGE_7D = "7d"
+    RANGE_30D = "30d"
+
+    RANGE_CHOICES = (
+        (RANGE_6H, "6小时"),
+        (RANGE_24H, "24小时"),
+        (RANGE_3D, "3天"),
+        (RANGE_7D, "7天"),
+        (RANGE_30D, "30天"),
+    )
+
+    range = serializers.ChoiceField(
+        choices=RANGE_CHOICES, default=RANGE_24H, required=False
+    )
+    device_id = serializers.IntegerField(required=False, min_value=1)

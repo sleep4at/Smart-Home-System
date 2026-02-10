@@ -12,8 +12,10 @@ from .permissions import IsDeviceOwnerOrAdmin
 from .serializers import (
     DeviceHistoryPointSerializer,
     DeviceHistoryQuerySerializer,
+    EnergyAnalysisQuerySerializer,
     DeviceSerializer,
 )
+from .energy import build_energy_analysis
 
 
 class DeviceViewSet(viewsets.ModelViewSet):
@@ -178,6 +180,48 @@ class DeviceHistoryView(APIView):
         )
         data = DeviceHistoryPointSerializer(qs, many=True).data
         return Response({"device_id": device.id, "range": query_serializer.validated_data.get("range", "24h"), "points": data})
+        
+
+class EnergyAnalysisView(APIView):
+    """
+    /api/energy/analysis/?range=6h|24h|3d|7d|30d&device_id={id}
+    返回估算功率时序、能耗与电费。
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _get_accessible_devices(self, request):
+        user = request.user
+        qs = Device.objects.all().order_by("id")
+        if user.is_staff or user.is_superuser:
+            return qs
+        return (qs.filter(owner=user) | qs.filter(is_public=True)).distinct()
+
+    def get(self, request):
+        query_serializer = EnergyAnalysisQuerySerializer(data=request.query_params)
+        query_serializer.is_valid(raise_exception=True)
+
+        range_value = query_serializer.validated_data.get("range", "24h")
+        device_id = query_serializer.validated_data.get("device_id")
+
+        qs = self._get_accessible_devices(request)
+        if device_id is not None:
+            try:
+                devices = [qs.get(pk=device_id)]
+            except Device.DoesNotExist:
+                return Response(
+                    {"detail": "设备不存在或无权限访问。"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        else:
+            devices = list(qs)
+
+        analysis = build_energy_analysis(devices=devices, range_value=range_value)
+        analysis["scope"] = {
+            "device_id": device_id,
+            "device_count": len(devices),
+        }
+        return Response(analysis)
         
 
 class DeviceTypeListView(APIView):
