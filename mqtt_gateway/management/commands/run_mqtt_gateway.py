@@ -88,8 +88,34 @@ class Command(BaseCommand):
                 if suffix_lower == "lwt":
                     text = payload if isinstance(payload, str) else str(payload)
                     is_online = text.lower() not in ("offline", "0", "false")
+                    switch_types = {
+                        DeviceType.LAMP_SWITCH,
+                        DeviceType.AC_SWITCH,
+                        DeviceType.FAN_SWITCH,
+                    }
+                    update_fields = ["is_online", "updated_at"]
+                    force_off_payload = None
+
+                    # 异常离线时，自动把开关类设备置为关闭，避免前端与能耗统计误判。
+                    if not is_online and device.type in switch_types:
+                        current_state = device.current_state if isinstance(device.current_state, dict) else {}
+                        new_state = dict(current_state)
+                        new_state["on"] = False
+                        new_state["power_w"] = 0.0
+                        if new_state != current_state:
+                            device.current_state = new_state
+                            update_fields.append("current_state")
+                        force_off_payload = {"on": False, "power_w": 0.0}
+
                     device.is_online = is_online
-                    device.save(update_fields=["is_online", "updated_at"])
+                    device.save(update_fields=update_fields)
+
+                    if force_off_payload is not None:
+                        DeviceData.objects.create(
+                            device=device,
+                            timestamp=timezone.now(),
+                            data=force_off_payload,
+                        )
 
                     if is_online:
                         tls_label = " (TLS)" if config.get("USE_TLS") else " (no TLS)"
