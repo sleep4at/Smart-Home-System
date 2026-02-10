@@ -22,7 +22,7 @@ const routes: RouteRecordRaw[] = [
         path: "history",
         name: "history",
         component: () => import("@/views/HistoryView.vue"),
-        meta: { title: "历史信息" },
+        meta: { title: "历史数据" },
       },
       {
         path: "scenes",

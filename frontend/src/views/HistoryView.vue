@@ -29,7 +29,11 @@
       </div>
     </div>
     <div v-if="selectedDeviceId && chartData.length" style="flex: 1; min-height: 400px;">
-      <v-chart :option="chartOption" style="width: 100%; height: 100%;" />
+      <v-chart
+        :option="chartOption"
+        :update-options="{ notMerge: true }"
+        style="width: 100%; height: 100%;"
+      />
     </div>
     <div v-else style="flex: 1; display: flex; align-items: center; justify-content: center; color: #9ca3af;">
       {{ isRefreshing ? '正在同步云端数据...' : '请选择设备和时间范围查看历史数据' }}
@@ -71,18 +75,85 @@ const chartData = ref<{ timestamp: string; data: Record<string, unknown> }[]>([]
 
 const isRefreshing = ref(false);
 
+type ParsedHistoryPoint = {
+  t: number;
+  data: Record<string, unknown>;
+};
+
+function parseTimestampToMs(timestamp: string): number | null {
+  if (!timestamp) return null;
+  // 兼容后端 6 位微秒时间戳，统一裁剪为毫秒，避免浏览器解析差异。
+  const normalized = timestamp.replace(/(\.\d{3})\d+/, "$1");
+  const ms = new Date(normalized).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+const parsedPoints = computed<ParsedHistoryPoint[]>(() =>
+  chartData.value
+    .map((p) => ({
+      t: parseTimestampToMs(p.timestamp),
+      data: (p.data ?? {}) as Record<string, unknown>,
+    }))
+    .filter((p): p is ParsedHistoryPoint => p.t !== null)
+    .sort((a, b) => a.t - b.t)
+);
+
+const xAxisRange = computed(() => {
+  if (!parsedPoints.value.length) return null;
+  let min = parsedPoints.value[0].t;
+  let max = parsedPoints.value[parsedPoints.value.length - 1].t;
+  if (min === max) {
+    min -= 60 * 1000;
+    max += 60 * 1000;
+  }
+  return { min, max };
+});
+
+function getDataZoomOptions() {
+  return [
+    {
+      type: "inside",
+      xAxisIndex: 0,
+      filterMode: "none",
+      start: 0,
+      end: 100,
+      zoomOnMouseWheel: true,
+      moveOnMouseWheel: false,
+      moveOnMouseMove: true,
+    },
+    {
+      type: "slider",
+      xAxisIndex: 0,
+      filterMode: "none",
+      start: 0,
+      end: 100,
+      bottom: "2%",
+    },
+  ];
+}
+
 // --- 监听设备列表，实现默认选中 ---
+function syncSelectedDevice(newList: { id: number }[]) {
+  if (!newList.length) {
+    selectedDeviceId.value = 0;
+    chartData.value = [];
+    return;
+  }
+  const exists = newList.some((d) => d.id === selectedDeviceId.value);
+  if (!exists) {
+    selectedDeviceId.value = newList[0].id;
+  }
+}
+
 watch(
   () => devices.list,
-  async (newList) => {
-    // 只有当目前没选设备，且列表里真的有设备时才执行
-    if (selectedDeviceId.value === 0 && newList.length > 0) {
-      selectedDeviceId.value = newList[0].id;
-      // 【关键修改点】在 ID 改变后，显式调用一次拉取函数
-      // 确保组件重新挂载时，只要有 ID 就能出图表
-      await fetchHistory(); 
-    }
-  },
+  (newList) => syncSelectedDevice(newList),
   { immediate: true }
 );
 // ------------------------------------------
@@ -112,28 +183,21 @@ async function fetchHistory() {
   }
 }
 
-watch([selectedDeviceId, selectedRange], fetchHistory);
+watch([selectedDeviceId, selectedRange], fetchHistory, { immediate: true });
 
 const selectedDevice = computed(() =>
   devices.list.find((d) => d.id === selectedDeviceId.value)
 );
 
 const chartOption = computed(() => {
-  if (!chartData.value.length || !selectedDevice.value) return {};
+  if (!parsedPoints.value.length || !selectedDevice.value || !xAxisRange.value) return {};
   const device = selectedDevice.value;
   const isTempHumi = device.type === "TEMP_HUMI";
   const isSwitch = ["LAMP_SWITCH", "AC_SWITCH", "FAN_SWITCH"].includes(device.type);
-  const times = chartData.value.map((p) => {
-    const date = new Date(p.timestamp);
-    return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-  });
 
   if (isTempHumi) {
-    // 将数据映射为 [时间戳, 数值] 的二维数组
-    const temperatures = chartData.value.map((p) => [new Date(p.timestamp).getTime(), p.data?.temp]);
-    const humidities = chartData.value.map((p) => [new Date(p.timestamp).getTime(), p.data?.humi]);
-    // const temperatures = chartData.value.map((p) => (p.data?.temp as number) ?? null);
-    // const humidities = chartData.value.map((p) => (p.data?.humi as number) ?? null);
+    const temperatures = parsedPoints.value.map((p) => [p.t, toNumberOrNull(p.data?.temp)]);
+    const humidities = parsedPoints.value.map((p) => [p.t, toNumberOrNull(p.data?.humi)]);
     return {
       title: { text: `${device.name} - 温湿度历史`, left: "center" },
       tooltip: { trigger: "axis" },
@@ -141,6 +205,8 @@ const chartOption = computed(() => {
       grid: { left: "3%", right: "4%", bottom: "22%", containLabel: true },
       xAxis: {
         type: "time",
+        min: xAxisRange.value.min,
+        max: xAxisRange.value.max,
         boundaryGap: false,
         axisLabel: {
           formatter: (value: number) => {
@@ -153,19 +219,32 @@ const chartOption = computed(() => {
         { type: "value", name: "温度(°C)", position: "left" },
         { type: "value", name: "湿度(%RH)", position: "right" },
       ],
-      dataZoom: [
-        { type: "inside", xAxisIndex: 0, start: 0, end: 100 },
-        { type: "slider", xAxisIndex: 0, start: 0, end: 100, bottom: "2%" },
-      ],
+      dataZoom: getDataZoomOptions(),
       series: [
-        { name: "温度(°C)", type: "line", data: temperatures, smooth: true, showSymbol: false, itemStyle: { color: "#ef4444" } },
-        { name: "湿度(%RH)", type: "line", yAxisIndex: 1, data: humidities, smooth: true, showSymbol: false, itemStyle: { color: "#3b82f6" } },
+        {
+          name: "温度(°C)",
+          type: "line",
+          data: temperatures,
+          smooth: true,
+          connectNulls: true,
+          showSymbol: false,
+          itemStyle: { color: "#ef4444" },
+        },
+        {
+          name: "湿度(%RH)",
+          type: "line",
+          yAxisIndex: 1,
+          data: humidities,
+          smooth: true,
+          connectNulls: true,
+          showSymbol: false,
+          itemStyle: { color: "#3b82f6" },
+        },
       ],
     };
   }
   if (isSwitch) {
-    // 方波：每个点 [时间戳, 0|1]，步进线使状态在时间上持续为水平线段，仅在切换时竖变
-    const states = chartData.value.map((p) => [new Date(p.timestamp).getTime(), p.data?.on ? 1 : 0]);
+    const states = parsedPoints.value.map((p) => [p.t, p.data?.on ? 1 : 0]);
     return {
       title: { text: `${device.name} - 开关状态历史`, left: "center" },
       tooltip: {
@@ -182,6 +261,8 @@ const chartOption = computed(() => {
       grid: { left: "3%", right: "4%", bottom: "22%", containLabel: true },
       xAxis: {
         type: "time",
+        min: xAxisRange.value.min,
+        max: xAxisRange.value.max,
         boundaryGap: false,
         axisLabel: {
           formatter: (value: number) => {
@@ -209,16 +290,14 @@ const chartOption = computed(() => {
           { value: 1, color: "#16a34a" },
         ],
       },
-      dataZoom: [
-        { type: "inside", xAxisIndex: 0, start: 0, end: 100 },
-        { type: "slider", xAxisIndex: 0, start: 0, end: 100, bottom: "2%" },
-      ],
+      dataZoom: getDataZoomOptions(),
       series: [
         {
           name: "开关状态",
           type: "line",
           data: states,
           step: "start",
+          connectNulls: true,
           showSymbol: false,
           lineStyle: { width: 2 },
           areaStyle: { opacity: 0.35 },
@@ -227,15 +306,18 @@ const chartOption = computed(() => {
       ],
     };
   }
-  const firstKey = chartData.value[0]?.data ? Object.keys(chartData.value[0].data)[0] : null;
+  const firstPoint = parsedPoints.value.find((p) => Object.keys(p.data || {}).length > 0);
+  const firstKey = firstPoint ? Object.keys(firstPoint.data)[0] : null;
   if (!firstKey) return {};
-  const values = chartData.value.map((p) => [new Date(p.timestamp).getTime(), (p.data?.[firstKey] as number) ?? null]);
+  const values = parsedPoints.value.map((p) => [p.t, toNumberOrNull(p.data?.[firstKey])]);
   return {
     title: { text: `${device.name} - ${firstKey}历史`, left: "center" },
     tooltip: { trigger: "axis" },
     grid: { left: "3%", right: "4%", bottom: "22%", containLabel: true },
     xAxis: {
       type: "time",
+      min: xAxisRange.value.min,
+      max: xAxisRange.value.max,
       boundaryGap: false,
       axisLabel: {
         formatter: (value: number) => {
@@ -245,11 +327,17 @@ const chartOption = computed(() => {
       },
     },
     yAxis: { type: "value" },
-    dataZoom: [
-      { type: "inside", xAxisIndex: 0, start: 0, end: 100 },
-      { type: "slider", xAxisIndex: 0, start: 0, end: 100, bottom: "2%" },
+    dataZoom: getDataZoomOptions(),
+    series: [
+      {
+        name: firstKey,
+        type: "line",
+        data: values,
+        smooth: true,
+        connectNulls: true,
+        itemStyle: { color: "#2563eb" },
+      },
     ],
-    series: [{ name: firstKey, type: "line", data: values, smooth: true, itemStyle: { color: "#2563eb" } }],
   };
 });
 
@@ -258,8 +346,11 @@ const chartOption = computed(() => {
 let timer: any = null;
 
 onMounted(async () => {
-  if (selectedDeviceId.value !== 0) {
-    await fetchHistory();
+  try {
+    // 历史页刷新后需要主动加载设备列表，否则下拉为空。
+    await devices.fetchDevices();
+  } catch (error) {
+    console.error("加载设备列表失败:", error);
   }
 
   // 每 15 秒自动执行一次获取数据的函数

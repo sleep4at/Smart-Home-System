@@ -38,8 +38,7 @@ const route = useRoute();
 
 const items = [
   { route: "home", label: "主页" },
-  { route: "history", label: "历史信息" },
+  { route: "history", label: "历史数据" },
   { route: "scenes", label: "场景模式" },
 ];
 </script>
-
