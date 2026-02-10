@@ -14,7 +14,7 @@ export interface LogMessage {
 }
 
 const defaultConn = () => ({
-  wsUrl: "ws://127.0.0.1:8083/mqtt",
+  wsUrl: (import.meta.env.VITE_MQTT_WS_URL || "ws://127.0.0.1:8083/mqtt").trim(),
   clientId: "",
   username: "",
   password: "",
@@ -221,13 +221,14 @@ export const useMqttDebugStore = defineStore("mqttDebug", {
     publish() {
       const topic = this.pubTopic.trim();
       if (!client || !topic) return;
-      const payload = this.pubPayload;
       client.publish(
         topic,
-        payload,
+        this.pubPayload,
         { qos: this.pubQos, retain: this.pubRetain },
         (err) => {
-          if (!err) this.addMessage("out", topic, payload || "(空)");
+          if (!err) {
+            this.addMessage("out", topic, this.pubPayload);
+          }
         }
       );
     },

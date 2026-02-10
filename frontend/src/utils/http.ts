@@ -1,8 +1,14 @@
 import axios, { type InternalAxiosRequestConfig } from "axios";
 import { useAuthStore } from "@/store/auth";
 
+// 约定：VITE_API_BASE_URL 填后端域名（可带 /api，代码会自动规范化）
+const rawApiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim();
+const normalizedApiBaseUrl = rawApiBaseUrl
+  .replace(/\/+$/, "")
+  .replace(/\/api$/, "");
+
 const api = axios.create({
-  baseURL: ""
+  baseURL: normalizedApiBaseUrl || "",
 });
 
 api.interceptors.request.use((config) => {
@@ -20,7 +26,9 @@ let refreshPromise: Promise<string> | null = null;
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const originalRequest = error.config as InternalAxiosRequestConfig & {
+      _retry?: boolean;
+    };
 
     if (error.response?.status !== 401) {
       return Promise.reject(error);
@@ -49,9 +57,12 @@ api.interceptors.response.use(
     }
 
     if (!refreshPromise) {
+      const refreshUrl = normalizedApiBaseUrl
+        ? `${normalizedApiBaseUrl}/api/auth/token/refresh/`
+        : "/api/auth/token/refresh/";
       refreshPromise = axios
-        .post<{ access: string }>(`${api.defaults.baseURL || ""}/api/auth/token/refresh/`, {
-          refresh: auth.refreshToken
+        .post<{ access: string }>(refreshUrl, {
+          refresh: auth.refreshToken,
         })
         .then((res) => {
           const access = res.data.access;
@@ -66,6 +77,7 @@ api.interceptors.response.use(
     try {
       const newAccess = await refreshPromise;
       originalRequest._retry = true;
+      originalRequest.headers = originalRequest.headers || {};
       originalRequest.headers.Authorization = `Bearer ${newAccess}`;
       return api.request(originalRequest);
     } catch (e) {
@@ -77,4 +89,3 @@ api.interceptors.response.use(
 );
 
 export default api;
-
