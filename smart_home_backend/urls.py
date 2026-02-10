@@ -20,7 +20,13 @@ from rest_framework import routers
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from accounts.views import MeView, UserViewSet
-from devices.views import DeviceHistoryView, DeviceTypeListView, DeviceViewSet, EnergyAnalysisView
+from devices.views import (
+    DeviceHistoryView,
+    DeviceTypeListView,
+    DeviceViewSet,
+    EnergyAnalysisExportCsvView,
+    EnergyAnalysisView,
+)
 from logs_app.views import EmailAlertRuleViewSet, SystemLogViewSet
 from mqtt_gateway.views import mqtt_status
 from scenes.views import SceneRuleViewSet
@@ -55,6 +61,10 @@ urlpatterns = [
         EnergyAnalysisView.as_view(),
         name="energy-analysis",
     ),
+    path(
+        "api/energy/analysis/export.csv",
+        EnergyAnalysisExportCsvView.as_view(),
+        name="energy-analysis-export-csv",
+    ),
     path("api/mqtt/status/", mqtt_status, name="mqtt-status"),
 ]
-

@@ -12,6 +12,15 @@
         >
           {{ loading ? "加载中..." : "刷新" }}
         </button>
+        <button
+          @click="exportEnergyCsv"
+          :disabled="loading || exportingCsv"
+          class="field-select"
+          style="width: 96px; cursor: pointer; background-color: #f3f4f6;"
+          :style="{ opacity: (loading || exportingCsv) ? 0.5 : 1 }"
+        >
+          {{ exportingCsv ? "导出中..." : "导出CSV" }}
+        </button>
 
         <select v-model="selectedDeviceId" class="field-select" style="width: 220px;">
           <option :value="0">全部设备</option>
@@ -180,6 +189,7 @@ const devices = useDevicesStore();
 const selectedDeviceId = ref<number>(0);
 const selectedRange = ref<string>("24h");
 const loading = ref(false);
+const exportingCsv = ref(false);
 const loadError = ref("");
 const analysis = ref<EnergyAnalysisResponse | null>(null);
 
@@ -341,18 +351,36 @@ function formatRuntimeHours(value: number | null | undefined) {
   return Number.isFinite(value) ? value.toFixed(2) : "—";
 }
 
+function buildQueryParams(): Record<string, string | number> {
+  const params: Record<string, string | number> = {
+    range: selectedRange.value,
+  };
+  if (selectedDeviceId.value) {
+    params.device_id = selectedDeviceId.value;
+  }
+  return params;
+}
+
+function parseCsvFilename(contentDisposition?: string): string | null {
+  if (!contentDisposition) return null;
+  const filenameUtf8 = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (filenameUtf8?.[1]) {
+    try {
+      return decodeURIComponent(filenameUtf8[1]);
+    } catch {
+      return filenameUtf8[1];
+    }
+  }
+  const filenameBasic = contentDisposition.match(/filename="?([^";]+)"?/i);
+  return filenameBasic?.[1] ?? null;
+}
+
 async function fetchEnergyAnalysis() {
   loading.value = true;
   loadError.value = "";
   try {
-    const params: Record<string, string | number> = {
-      range: selectedRange.value,
-    };
-    if (selectedDeviceId.value) {
-      params.device_id = selectedDeviceId.value;
-    }
     const res = await api.get<EnergyAnalysisResponse>("/api/energy/analysis/", {
-      params,
+      params: buildQueryParams(),
     });
     analysis.value = res.data;
   } catch (error) {
@@ -361,6 +389,35 @@ async function fetchEnergyAnalysis() {
     analysis.value = null;
   } finally {
     loading.value = false;
+  }
+}
+
+async function exportEnergyCsv() {
+  exportingCsv.value = true;
+  loadError.value = "";
+  try {
+    const res = await api.get("/api/energy/analysis/export.csv", {
+      params: buildQueryParams(),
+      responseType: "blob",
+    });
+    const disposition = (res.headers?.["content-disposition"] as string | undefined) ?? "";
+    const filename =
+      parseCsvFilename(disposition) ??
+      `能耗分析_${selectedDeviceId.value || "all"}_${selectedRange.value}.csv`;
+    const blob = new Blob([res.data], { type: "text/csv;charset=utf-8;" });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+  } catch (error) {
+    console.error("导出 CSV 失败:", error);
+    loadError.value = "导出 CSV 失败，请稍后重试。";
+  } finally {
+    exportingCsv.value = false;
   }
 }
 

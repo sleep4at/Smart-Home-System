@@ -1,3 +1,8 @@
+import csv
+import io
+from urllib.parse import quote
+
+from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -222,7 +227,124 @@ class EnergyAnalysisView(APIView):
             "device_count": len(devices),
         }
         return Response(analysis)
-        
+
+
+class EnergyAnalysisExportCsvView(APIView):
+    """
+    /api/energy/analysis/export.csv?range=6h|24h|3d|7d|30d&device_id={id}
+    导出能耗分析 CSV（设备分项明细）。
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _get_accessible_devices(self, request):
+        user = request.user
+        qs = Device.objects.all().order_by("id")
+        if user.is_staff or user.is_superuser:
+            return qs
+        return (qs.filter(owner=user) | qs.filter(is_public=True)).distinct()
+
+    def get(self, request):
+        query_serializer = EnergyAnalysisQuerySerializer(data=request.query_params)
+        query_serializer.is_valid(raise_exception=True)
+
+        range_value = query_serializer.validated_data.get("range", "24h")
+        device_id = query_serializer.validated_data.get("device_id")
+
+        qs = self._get_accessible_devices(request)
+        if device_id is not None:
+            try:
+                devices = [qs.get(pk=device_id)]
+            except Device.DoesNotExist:
+                return Response(
+                    {"detail": "设备不存在或无权限访问。"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        else:
+            devices = list(qs)
+
+        analysis = build_energy_analysis(devices=devices, range_value=range_value)
+        analysis["scope"] = {
+            "device_id": device_id,
+            "device_count": len(devices),
+        }
+
+        monthly = analysis.get("monthly_estimate", {})
+        rows = analysis.get("device_breakdown", [])
+        total = analysis.get("total", {})
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        # 区块一：汇总信息（单值，不重复到每个设备行）
+        summary_rows = [
+            ("统计范围", range_value),
+            ("开始时间", analysis.get("start", "")),
+            ("结束时间", analysis.get("end", "")),
+            ("电价(元/kWh)", analysis.get("price_per_kwh", "")),
+            ("区间总能耗(kWh)", total.get("energy_kwh", "")),
+            ("区间总费用(元)", total.get("cost", "")),
+            ("区间平均功率(W)", total.get("avg_power_w", "")),
+            ("区间峰值功率(W)", total.get("peak_power_w", "")),
+            ("当月累计电费(元)", monthly.get("cost_so_far", "")),
+            ("当月预估电费(元)", monthly.get("projected_cost", "")),
+            ("当月已过天数", monthly.get("elapsed_days", "")),
+            ("当月总天数", monthly.get("days_in_month", "")),
+        ]
+        for k, v in summary_rows:
+            writer.writerow([k, v])
+
+        # 空行分隔
+        writer.writerow([])
+
+        # 区块二：设备明细
+        writer.writerow(["设备明细"])
+        writer.writerow(
+            [
+                "设备ID",
+                "设备名称",
+                "位置",
+                "设备类型编码",
+                "设备类型",
+                "区间能耗(kWh)",
+                "区间费用(元)",
+                "区间峰值功率(W)",
+                "区间平均功率(W)",
+                "当月运行时长(h)",
+            ]
+        )
+        if rows:
+            for row in rows:
+                writer.writerow(
+                    [
+                        row.get("device_id", ""),
+                        row.get("name", ""),
+                        row.get("location", ""),
+                        row.get("type", ""),
+                        row.get("type_display", ""),
+                        row.get("energy_kwh", ""),
+                        row.get("cost", ""),
+                        row.get("peak_power_w", ""),
+                        row.get("avg_power_w", ""),
+                        row.get("monthly_runtime_hours", ""),
+                    ]
+                )
+        else:
+            writer.writerow(["", "当前筛选条件下无设备明细数据"])
+
+        scope_label = f"device_{device_id}" if device_id is not None else "all_devices"
+        stamp = timezone.now().strftime("%Y%m%d_%H%M%S")
+        filename_cn = f"能耗分析_{scope_label}_{range_value}_{stamp}.csv"
+        filename_ascii = f"energy_analysis_{scope_label}_{range_value}_{stamp}.csv"
+
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = (
+            f'attachment; filename="{filename_ascii}"; '
+            f"filename*=UTF-8''{quote(filename_cn)}"
+        )
+        response.write("\ufeff")
+        response.write(output.getvalue())
+        return response
+
 
 class DeviceTypeListView(APIView):
     """
