@@ -28,10 +28,11 @@
         </select>
       </div>
     </div>
-    <div v-if="selectedDeviceId && chartData.length" style="flex: 1; min-height: 400px;">
+    <div v-if="selectedDeviceId && chartData.length" class="history-chart-wrap">
       <v-chart
         :option="chartOption"
         :update-options="{ notMerge: true }"
+        :autoresize="true"
         style="width: 100%; height: 100%;"
       />
     </div>
@@ -145,9 +146,12 @@ function syncSelectedDevice(newList: { id: number }[]) {
     chartData.value = [];
     return;
   }
-  const exists = newList.some((d) => d.id === selectedDeviceId.value);
+  const currentId = Number(selectedDeviceId.value) || 0;
+  const exists = newList.some((d) => d.id === currentId);
   if (!exists) {
     selectedDeviceId.value = newList[0].id;
+  } else if (selectedDeviceId.value !== currentId) {
+    selectedDeviceId.value = currentId;
   }
 }
 
@@ -186,7 +190,7 @@ async function fetchHistory() {
 watch([selectedDeviceId, selectedRange], fetchHistory, { immediate: true });
 
 const selectedDevice = computed(() =>
-  devices.list.find((d) => d.id === selectedDeviceId.value)
+  devices.list.find((d) => d.id === (Number(selectedDeviceId.value) || 0))
 );
 
 const chartOption = computed(() => {
@@ -370,3 +374,18 @@ onUnmounted(() => {
 });
 // ------------------
 </script>
+
+<style scoped>
+.history-chart-wrap {
+  width: 100%;
+  height: clamp(500px, 74vh, 900px);
+  min-height: 500px;
+}
+
+@media (max-width: 768px) {
+  .history-chart-wrap {
+    height: clamp(360px, 58vh, 620px);
+    min-height: 360px;
+  }
+}
+</style>
