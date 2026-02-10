@@ -354,6 +354,15 @@ class Command(BaseCommand):
                         triggered = trigger_field_value < min_val or trigger_field_value > max_val
 
             if triggered:
+                # 执行设备离线时，跳过联动，不发布命令、不写场景日志/横幅。
+                if not rule.action_device.is_online:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"场景规则「{rule.name}」命中，但执行设备 [{rule.action_device.name}] 离线，已跳过联动"
+                        )
+                    )
+                    continue
+
                 # 执行动作
                 action_payload = {}
                 if rule.action_type == SceneRule.ACTION_TOGGLE:
