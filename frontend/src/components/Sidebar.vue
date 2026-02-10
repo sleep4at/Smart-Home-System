@@ -13,10 +13,12 @@
         :key="item.route"
         :to="{ name: item.route }"
         class="sidebar-item"
+        :title="item.label"
         :class="[
           $route.name === item.route ? 'active' : 'inactive',
         ]"
       >
+        <span class="icon" aria-hidden="true">{{ item.icon }}</span>
         <span class="sidebar-label">{{ item.label }}</span>
       </RouterLink>
     </nav>
@@ -37,8 +39,9 @@ defineEmits<{
 const route = useRoute();
 
 const items = [
-  { route: "home", label: "主页" },
-  { route: "history", label: "历史数据" },
-  { route: "scenes", label: "场景模式" },
+  { route: "home", label: "主页", icon: "⌂" },
+  { route: "history", label: "历史数据", icon: "◷" },
+  { route: "energy", label: "能耗分析", icon: "↯" },
+  { route: "scenes", label: "场景模式", icon: "◈" },
 ];
 </script>

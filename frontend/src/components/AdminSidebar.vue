@@ -13,8 +13,10 @@
         :key="item.route"
         :to="{ name: item.route }"
         class="sidebar-item"
+        :title="item.label"
         :class="$route.name === item.route ? 'active' : 'inactive'"
       >
+        <span class="icon" aria-hidden="true">{{ item.icon }}</span>
         <span class="sidebar-label">{{ item.label }}</span>
       </RouterLink>
     </nav>
@@ -28,10 +30,10 @@ defineProps<{ collapsed: boolean }>();
 defineEmits<{ (e: "toggle"): void }>();
 
 const items = [
-  { route: "admin-users", label: "用户管理" },
-  { route: "admin-devices", label: "设备管理" },
-  { route: "admin-email-alerts", label: "邮件告警" },
-  { route: "admin-debug-tools", label: "调试工具" },
-  { route: "admin-console", label: "日志信息" },
+  { route: "admin-users", label: "用户管理", icon: "◉" },
+  { route: "admin-devices", label: "设备管理", icon: "▣" },
+  { route: "admin-email-alerts", label: "邮件告警", icon: "✉" },
+  { route: "admin-debug-tools", label: "调试工具", icon: "⚒" },
+  { route: "admin-console", label: "日志信息", icon: "▤" },
 ];
 </script>

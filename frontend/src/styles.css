@@ -293,8 +293,13 @@ button {
 }
 
 .sidebar-item span.icon {
-  width: 20px;
+  width: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .sidebar-item.inactive {
@@ -311,6 +316,12 @@ button {
 
 .sidebar.collapsed .sidebar-label {
   display: none;
+}
+
+.sidebar.collapsed .sidebar-item {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .dialog-backdrop {
@@ -391,4 +402,3 @@ button {
   background-color: #e5e7eb;
   color: #4b5563;
 }
-
