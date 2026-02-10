@@ -95,6 +95,20 @@ function toNumberOrNull(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function inferSwitchOn(
+  data: Record<string, unknown>,
+  previous: boolean | null
+): boolean | null {
+  if (Object.prototype.hasOwnProperty.call(data, "on")) {
+    return Boolean(data.on);
+  }
+  const power = toNumberOrNull(data.power_w ?? data.power);
+  if (power !== null) {
+    return power > 0;
+  }
+  return previous;
+}
+
 const parsedPoints = computed<ParsedHistoryPoint[]>(() =>
   chartData.value
     .map((p) => ({
@@ -248,7 +262,15 @@ const chartOption = computed(() => {
     };
   }
   if (isSwitch) {
-    const states = parsedPoints.value.map((p) => [p.t, p.data?.on ? 1 : 0]);
+    const states: [number, number | null][] = [];
+    let previousState: boolean | null = null;
+    for (const p of parsedPoints.value) {
+      const current = inferSwitchOn(p.data, previousState);
+      if (current !== null) {
+        previousState = current;
+      }
+      states.push([p.t, current === null ? null : current ? 1 : 0]);
+    }
     return {
       title: { text: `${device.name} - 开关状态历史`, left: "center" },
       tooltip: {
@@ -258,6 +280,7 @@ const chartOption = computed(() => {
           if (!p?.data) return "";
           const t = Array.isArray(p.data) ? p.data[0] : p.data;
           const v = Array.isArray(p.data) ? p.data[1] : p.data;
+          if (v === null || v === undefined) return "";
           const timeStr = typeof t === "number" ? new Date(t).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
           return `${timeStr}<br/>状态：${v === 1 ? "开启" : "关闭"}`;
         },

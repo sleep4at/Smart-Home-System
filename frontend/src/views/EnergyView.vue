@@ -236,8 +236,16 @@ const powerChartOption = computed(() => {
   if (!powerSeries.value.length) return {};
   const min = powerSeries.value[0][0];
   const max = powerSeries.value[powerSeries.value.length - 1][0];
+  const pointCount = powerSeries.value.length;
 
   return {
+    animation: true,
+    animationDuration: 500,
+    animationDurationUpdate: 400,
+    animationEasing: "cubicOut",
+    animationEasingUpdate: "cubicOut",
+    // 全部设备聚合时点数较大，默认阈值会自动关闭动画。
+    animationThreshold: Math.max(2000, pointCount + 100),
     tooltip: {
       trigger: "axis",
       formatter: (params: any) => {
@@ -299,8 +307,11 @@ const powerChartOption = computed(() => {
         name: "功率",
         type: "line",
         step: "start",
+        animation: true,
         connectNulls: true,
         showSymbol: false,
+        progressive: 0,
+        progressiveThreshold: 100000,
         data: powerSeries.value,
         lineStyle: { width: 2, color: "#2563eb" },
         areaStyle: { color: "rgba(37, 99, 235, 0.12)" },
@@ -314,6 +325,12 @@ const breakdownChartOption = computed(() => {
   const names = deviceBreakdown.value.map((d) => d.name);
   const values = deviceBreakdown.value.map((d) => d.energy_kwh);
   return {
+    animation: true,
+    animationDuration: 500,
+    animationDurationUpdate: 400,
+    animationEasing: "cubicOut",
+    animationEasingUpdate: "cubicOut",
+    animationThreshold: Math.max(2000, values.length + 100),
     tooltip: { trigger: "axis" },
     grid: { left: "3%", right: "4%", bottom: "8%", containLabel: true },
     xAxis: {
@@ -327,6 +344,9 @@ const breakdownChartOption = computed(() => {
     series: [
       {
         type: "bar",
+        animation: true,
+        progressive: 0,
+        progressiveThreshold: 100000,
         data: values,
         itemStyle: { color: "#0ea5e9" },
       },
