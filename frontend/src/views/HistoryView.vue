@@ -43,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted } from "vue";
+import { computed, ref, watch, onMounted } from "vue";
 import { use } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { LineChart, BarChart } from "echarts/charts";
@@ -205,6 +205,22 @@ watch([selectedDeviceId, selectedRange], fetchHistory, { immediate: true });
 
 const selectedDevice = computed(() =>
   devices.list.find((d) => d.id === (Number(selectedDeviceId.value) || 0))
+);
+const selectedDeviceUpdatedAt = computed(() => selectedDevice.value?.updated_at || null);
+
+const HISTORY_EVENT_REFRESH_MIN_INTERVAL_MS = 2500;
+let lastEventRefreshAt = 0;
+
+watch(
+  selectedDeviceUpdatedAt,
+  (newUpdatedAt, oldUpdatedAt) => {
+    if (!selectedDeviceId.value || !newUpdatedAt || !oldUpdatedAt) return;
+    if (newUpdatedAt === oldUpdatedAt) return;
+    const now = Date.now();
+    if (now - lastEventRefreshAt < HISTORY_EVENT_REFRESH_MIN_INTERVAL_MS) return;
+    lastEventRefreshAt = now;
+    fetchHistory();
+  }
 );
 
 const chartOption = computed(() => {
@@ -369,9 +385,6 @@ const chartOption = computed(() => {
 });
 
 
-// --- 自动刷新逻辑 ---
-let timer: any = null;
-
 onMounted(async () => {
   try {
     // 历史页刷新后需要主动加载设备列表，否则下拉为空。
@@ -379,23 +392,7 @@ onMounted(async () => {
   } catch (error) {
     console.error("加载设备列表失败:", error);
   }
-
-  // 每 15 秒自动执行一次获取数据的函数
-  timer = setInterval(() => {
-    // 只有当用户选了设备时才自动刷新，避免无效请求
-    if (selectedDeviceId.value !== 0) {
-      fetchHistory();
-    }
-  }, 30000); // 30000 毫秒 = 30 秒
 });
-
-onUnmounted(() => {
-  // 当页面销毁（切换到其他菜单）时，必须清除定时器
-  if (timer) {
-    clearInterval(timer);
-  }
-});
-// ------------------
 </script>
 
 <style scoped>

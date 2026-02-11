@@ -4,18 +4,45 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import api from "@/utils/http";
 import { useAuthStore } from "@/store/auth";
 import { useBannerStore } from "@/store/banner";
 import { useMqttStatusStore } from "@/store/mqttStatus";
+import { useDevicesStore, type Device } from "@/store/devices";
 
 const auth = useAuthStore();
 const banner = useBannerStore();
 const mqttStatus = useMqttStatusStore();
+const devices = useDevicesStore();
 
 const lastSeenLogId = ref(0);
 const firstPollDone = ref(false);
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+type RealtimeLogPayload = {
+  id: number;
+  source: string;
+  level: string;
+  message: string;
+  created_at?: string;
+};
+
+type RealtimeInitPayload = {
+  last_log_id: number;
+  mqtt_connected: boolean;
+  devices: Device[];
+};
+
+type RealtimeDevicesPayload = {
+  items: Device[];
+};
+
+const rawApiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim();
+const normalizedApiBaseUrl = rawApiBaseUrl
+  .replace(/\/+$/, "")
+  .replace(/\/api$/, "");
+
+let stream: EventSource | null = null;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+const reconnectDelayMs = 2000;
 
 function logToBanner(log: { id: number; source: string; level: string; message: string }) {
   if (log.id <= lastSeenLogId.value) return;
@@ -55,34 +82,98 @@ function logToBanner(log: { id: number; source: string; level: string; message: 
   }
 }
 
-function updateMqttStatus() {
-  mqttStatus.fetchStatus();
+function parseEventData<T>(event: Event): T | null {
+  try {
+    const data = (event as MessageEvent<string>).data;
+    return JSON.parse(data) as T;
+  } catch {
+    return null;
+  }
 }
 
-function pollLogs() {
-  // 仅拉取最新日志用于横幅，不写入全局 logsStore，避免覆盖控制台页面的筛选结果
-  api.get<{ id: number; source: string; level: string; message: string }[]>("/api/logs/system/", {
-    params: { limit: 30 },
-  }).then((res) => {
-    const list = res.data || [];
-    list.forEach((log) => logToBanner(log));
-    const maxId = list.length ? Math.max(...list.map((l) => l.id)) : 0;
-    if (maxId > lastSeenLogId.value) lastSeenLogId.value = maxId;
-    if (!firstPollDone.value) firstPollDone.value = true;
+function buildRealtimeStreamUrl() {
+  const path = "/api/realtime/stream/";
+  const baseUrl = normalizedApiBaseUrl ? `${normalizedApiBaseUrl}${path}` : path;
+  const accessToken = auth.accessToken;
+  if (!accessToken) return baseUrl;
+  const separator = baseUrl.includes("?") ? "&" : "?";
+  return `${baseUrl}${separator}access_token=${encodeURIComponent(accessToken)}`;
+}
+
+function clearReconnectTimer() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
+function closeStream() {
+  if (stream) {
+    stream.close();
+    stream = null;
+  }
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer || !auth.isAuthenticated) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    openRealtimeStream();
+  }, reconnectDelayMs);
+}
+
+function openRealtimeStream() {
+  closeStream();
+  clearReconnectTimer();
+  const url = buildRealtimeStreamUrl();
+  stream = new EventSource(url);
+
+  stream.addEventListener("init", (event) => {
+    const payload = parseEventData<RealtimeInitPayload>(event);
+    if (!payload) return;
+    if (typeof payload.last_log_id === "number") {
+      lastSeenLogId.value = payload.last_log_id;
+    }
+    if (typeof payload.mqtt_connected === "boolean") {
+      mqttStatus.setConnected(payload.mqtt_connected);
+    }
+    if (Array.isArray(payload.devices)) {
+      devices.setDevicesSnapshot(payload.devices);
+    }
+    firstPollDone.value = true;
   });
-}
 
-let mqttTimer: ReturnType<typeof setInterval> | null = null;
+  stream.addEventListener("log", (event) => {
+    const payload = parseEventData<RealtimeLogPayload>(event);
+    if (!payload) return;
+    logToBanner(payload);
+  });
+
+  stream.addEventListener("mqtt_status", (event) => {
+    const payload = parseEventData<{ connected: boolean }>(event);
+    if (!payload || typeof payload.connected !== "boolean") return;
+    mqttStatus.setConnected(payload.connected);
+  });
+
+  stream.addEventListener("devices", (event) => {
+    const payload = parseEventData<RealtimeDevicesPayload>(event);
+    if (!payload || !Array.isArray(payload.items)) return;
+    devices.setDevicesSnapshot(payload.items);
+  });
+
+  stream.onerror = () => {
+    closeStream();
+    scheduleReconnect();
+  };
+}
 
 onMounted(() => {
   if (!auth.isAuthenticated) return;
-  updateMqttStatus();
-  pollTimer = setInterval(pollLogs, 2000);
-  mqttTimer = setInterval(updateMqttStatus, 2000); // 每 2 秒刷新 MQTT 状态，供主页指示器实时显示（轮询）
+  openRealtimeStream();
 });
 
 onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer);
-  if (mqttTimer) clearInterval(mqttTimer);
+  closeStream();
+  clearReconnectTimer();
 });
 </script>

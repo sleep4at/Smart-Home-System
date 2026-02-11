@@ -21,6 +21,8 @@ export interface Device {
   is_public: boolean;
   current_state: Record<string, any>;
   owner: number | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface DeviceTypeOption {
@@ -52,6 +54,10 @@ export const useDevicesStore = defineStore("devices", {
       )
   },
   actions: {
+    setDevicesSnapshot(devices: Device[]) {
+      this.list = devices;
+      this.loading = false;
+    },
     async fetchDevices() {
       this.loading = true;
       try {
@@ -111,4 +117,3 @@ export const useDevicesStore = defineStore("devices", {
     }
   }
 });
-

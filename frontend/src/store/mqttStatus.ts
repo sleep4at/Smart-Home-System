@@ -8,6 +8,11 @@ export const useMqttStatusStore = defineStore("mqttStatus", {
     lastChecked: null as number | null,
   }),
   actions: {
+    setConnected(connected: boolean) {
+      this.connected = connected;
+      this.loading = false;
+      this.lastChecked = Date.now();
+    },
     async fetchStatus() {
       // 仅首次请求时置为 loading，避免轮询时界面在「检查中」与「已连接」间闪烁
       if (this.lastChecked === null) this.loading = true;

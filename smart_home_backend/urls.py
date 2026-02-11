@@ -28,7 +28,7 @@ from devices.views import (
     EnergyAnalysisView,
 )
 from logs_app.views import EmailAlertRuleViewSet, SystemLogViewSet
-from mqtt_gateway.views import mqtt_status
+from mqtt_gateway.views import mqtt_status, realtime_stream
 from scenes.views import SceneRuleViewSet
 
 router = routers.DefaultRouter()
@@ -67,4 +67,5 @@ urlpatterns = [
         name="energy-analysis-export-csv",
     ),
     path("api/mqtt/status/", mqtt_status, name="mqtt-status"),
+    path("api/realtime/stream/", realtime_stream, name="realtime-stream"),
 ]

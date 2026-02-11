@@ -34,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { onMounted, ref } from "vue";
 import { useDevicesStore } from "@/store/devices";
 import { useAuthStore } from "@/store/auth";
 import { useBannerStore } from "@/store/banner";
@@ -48,14 +48,9 @@ const banner = useBannerStore();
 const showDialog = ref(false);
 const editingDevice = ref<Device | null>(null);
 
-let refreshTimer: ReturnType<typeof setInterval> | null = null;
 onMounted(async () => {
   await devices.fetchDevices();
   if (auth.isAdmin) await devices.fetchTypes();
-  refreshTimer = setInterval(() => devices.fetchDevices(), 2000); // 每 2 秒刷新一次设备列表（轮询）
-});
-onUnmounted(() => {
-  if (refreshTimer) clearInterval(refreshTimer);
 });
 
 const openCreate = () => {
