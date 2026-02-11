@@ -1,8 +1,13 @@
 """MQTT 相关 API。"""
 
 import json
+import secrets
 import time
 
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.core import signing
+from django.core.cache import cache
 from django.db import close_old_connections
 from django.db.models import Count, Max
 from django.http import HttpResponse, StreamingHttpResponse
@@ -17,6 +22,10 @@ from devices.models import Device
 from devices.serializers import DeviceSerializer
 from logs_app.models import SystemLog
 from mqtt_gateway.utils import get_mqtt_client
+
+STREAM_TOKEN_SALT = "mqtt_gateway.realtime_stream"
+STREAM_TOKEN_CACHE_PREFIX = "mqtt_gateway:stream_token:used:"
+STREAM_TOKEN_TTL_SECONDS = max(int(getattr(settings, "REALTIME_STREAM_TOKEN_TTL_SECONDS", 30)), 5)
 
 
 @api_view(["GET"])
@@ -33,14 +42,74 @@ def mqtt_status(request):
         )
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def realtime_stream_token(request):
+    """
+    GET /api/realtime/stream-token/
+    返回短时、一次性使用的 SSE 票据，避免把主 access token 暴露在 URL 查询参数。
+    """
+    payload = {
+        "uid": int(request.user.id),
+        "nonce": secrets.token_urlsafe(12),
+    }
+    token = signing.dumps(payload, salt=STREAM_TOKEN_SALT, compress=True)
+    return Response(
+        {
+            "stream_token": token,
+            "expires_in": STREAM_TOKEN_TTL_SECONDS,
+        }
+    )
+
+
+def _consume_stream_token(token):
+    try:
+        payload = signing.loads(
+            token,
+            salt=STREAM_TOKEN_SALT,
+            max_age=STREAM_TOKEN_TTL_SECONDS,
+        )
+    except signing.BadSignature:
+        return None
+
+    uid = payload.get("uid")
+    nonce = payload.get("nonce")
+    if uid is None or not nonce:
+        return None
+
+    # 一次性票据：同一 nonce 仅允许消费一次，减少日志泄露后的重放窗口。
+    if not cache.add(f"{STREAM_TOKEN_CACHE_PREFIX}{nonce}", "1", timeout=STREAM_TOKEN_TTL_SECONDS):
+        return None
+
+    user_model = get_user_model()
+    try:
+        return user_model.objects.get(pk=uid, is_active=True)
+    except user_model.DoesNotExist:
+        return None
+
+
 def _authenticate_stream_user(request):
     """
     EventSource 原生不支持自定义 Authorization header，
-    这里兼容 ?access_token=xxx 的方式进行 JWT 鉴权。
+    优先使用短时一次性 stream_token 鉴权，避免长期 access token 出现在 URL。
     """
     user = getattr(request, "user", None)
     if user is not None and user.is_authenticated:
         return user
+
+    stream_token = (request.GET.get("stream_token") or request.GET.get("st") or "").strip()
+    if stream_token:
+        user = _consume_stream_token(stream_token)
+        if user is not None:
+            request.user = user
+            return user
+
+    # 兼容旧前端（默认关闭）
+    allow_legacy_query_access_token = bool(
+        getattr(settings, "REALTIME_STREAM_ALLOW_LEGACY_ACCESS_TOKEN_QUERY", False)
+    )
+    if not allow_legacy_query_access_token:
+        return None
 
     token = (request.GET.get("access_token") or request.GET.get("token") or "").strip()
     if not token:

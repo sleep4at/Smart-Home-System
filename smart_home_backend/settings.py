@@ -19,6 +19,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv()   # 加载 .env 变量
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -28,8 +35,11 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = []
-
+# ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    host for host in os.getenv('DJANGO_ALLOWED_HOSTS', '').split(',')
+    if host
+]
 
 # Application definition
 
@@ -167,7 +177,11 @@ REST_FRAMEWORK = {
 
 from corsheaders.defaults import default_headers  # type: ignore
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = _env_bool("DJANGO_CORS_ALLOW_ALL_ORIGINS", False)
+if not CORS_ALLOW_ALL_ORIGINS:
+    CORS_ALLOWED_ORIGINS = os.getenv("DJANGO_CORS_ALLOWED_ORIGINS", "").split(",")
+    CORS_ALLOWED_ORIGINS = [o for o in CORS_ALLOWED_ORIGINS if o]
+
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'authorization',
 ]
@@ -179,6 +193,19 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
+
+# ==== Security 基础加固（不改变业务逻辑） ====
+
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = 'same-origin'
+
+# SSE 临时票据（短时一次性）配置
+REALTIME_STREAM_TOKEN_TTL_SECONDS = int(os.getenv('REALTIME_STREAM_TOKEN_TTL_SECONDS', '30'))
+REALTIME_STREAM_ALLOW_LEGACY_ACCESS_TOKEN_QUERY = _env_bool(
+    'REALTIME_STREAM_ALLOW_LEGACY_ACCESS_TOKEN_QUERY',
+    False,
+)
 
 # ==== MQTT 模拟设备配置 ====
 

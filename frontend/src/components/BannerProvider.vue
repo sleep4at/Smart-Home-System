@@ -8,6 +8,7 @@ import { useAuthStore } from "@/store/auth";
 import { useBannerStore } from "@/store/banner";
 import { useMqttStatusStore } from "@/store/mqttStatus";
 import { useDevicesStore, type Device } from "@/store/devices";
+import api from "@/utils/http";
 
 const auth = useAuthStore();
 const banner = useBannerStore();
@@ -43,6 +44,7 @@ const normalizedApiBaseUrl = rawApiBaseUrl
 let stream: EventSource | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 const reconnectDelayMs = 2000;
+let connectRequestId = 0;
 
 function logToBanner(log: { id: number; source: string; level: string; message: string }) {
   if (log.id <= lastSeenLogId.value) return;
@@ -91,13 +93,12 @@ function parseEventData<T>(event: Event): T | null {
   }
 }
 
-function buildRealtimeStreamUrl() {
+function buildRealtimeStreamUrl(streamToken: string) {
   const path = "/api/realtime/stream/";
   const baseUrl = normalizedApiBaseUrl ? `${normalizedApiBaseUrl}${path}` : path;
-  const accessToken = auth.accessToken;
-  if (!accessToken) return baseUrl;
+  if (!streamToken) return baseUrl;
   const separator = baseUrl.includes("?") ? "&" : "?";
-  return `${baseUrl}${separator}access_token=${encodeURIComponent(accessToken)}`;
+  return `${baseUrl}${separator}stream_token=${encodeURIComponent(streamToken)}`;
 }
 
 function clearReconnectTimer() {
@@ -123,48 +124,62 @@ function scheduleReconnect() {
 }
 
 function openRealtimeStream() {
+  const requestId = ++connectRequestId;
   closeStream();
   clearReconnectTimer();
-  const url = buildRealtimeStreamUrl();
-  stream = new EventSource(url);
+  api.get<{ stream_token: string }>("/api/realtime/stream-token/")
+    .then((res) => {
+      if (requestId !== connectRequestId || !auth.isAuthenticated) return;
+      const streamToken = (res.data?.stream_token ?? "").trim();
+      if (!streamToken) {
+        scheduleReconnect();
+        return;
+      }
+      const url = buildRealtimeStreamUrl(streamToken);
+      stream = new EventSource(url);
 
-  stream.addEventListener("init", (event) => {
-    const payload = parseEventData<RealtimeInitPayload>(event);
-    if (!payload) return;
-    if (typeof payload.last_log_id === "number") {
-      lastSeenLogId.value = payload.last_log_id;
-    }
-    if (typeof payload.mqtt_connected === "boolean") {
-      mqttStatus.setConnected(payload.mqtt_connected);
-    }
-    if (Array.isArray(payload.devices)) {
-      devices.setDevicesSnapshot(payload.devices);
-    }
-    firstPollDone.value = true;
-  });
+      stream.addEventListener("init", (event) => {
+        const payload = parseEventData<RealtimeInitPayload>(event);
+        if (!payload) return;
+        if (typeof payload.last_log_id === "number") {
+          lastSeenLogId.value = payload.last_log_id;
+        }
+        if (typeof payload.mqtt_connected === "boolean") {
+          mqttStatus.setConnected(payload.mqtt_connected);
+        }
+        if (Array.isArray(payload.devices)) {
+          devices.setDevicesSnapshot(payload.devices);
+        }
+        firstPollDone.value = true;
+      });
 
-  stream.addEventListener("log", (event) => {
-    const payload = parseEventData<RealtimeLogPayload>(event);
-    if (!payload) return;
-    logToBanner(payload);
-  });
+      stream.addEventListener("log", (event) => {
+        const payload = parseEventData<RealtimeLogPayload>(event);
+        if (!payload) return;
+        logToBanner(payload);
+      });
 
-  stream.addEventListener("mqtt_status", (event) => {
-    const payload = parseEventData<{ connected: boolean }>(event);
-    if (!payload || typeof payload.connected !== "boolean") return;
-    mqttStatus.setConnected(payload.connected);
-  });
+      stream.addEventListener("mqtt_status", (event) => {
+        const payload = parseEventData<{ connected: boolean }>(event);
+        if (!payload || typeof payload.connected !== "boolean") return;
+        mqttStatus.setConnected(payload.connected);
+      });
 
-  stream.addEventListener("devices", (event) => {
-    const payload = parseEventData<RealtimeDevicesPayload>(event);
-    if (!payload || !Array.isArray(payload.items)) return;
-    devices.setDevicesSnapshot(payload.items);
-  });
+      stream.addEventListener("devices", (event) => {
+        const payload = parseEventData<RealtimeDevicesPayload>(event);
+        if (!payload || !Array.isArray(payload.items)) return;
+        devices.setDevicesSnapshot(payload.items);
+      });
 
-  stream.onerror = () => {
-    closeStream();
-    scheduleReconnect();
-  };
+      stream.onerror = () => {
+        closeStream();
+        scheduleReconnect();
+      };
+    })
+    .catch(() => {
+      if (requestId !== connectRequestId) return;
+      scheduleReconnect();
+    });
 }
 
 onMounted(() => {
@@ -173,6 +188,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  connectRequestId += 1;
   closeStream();
   clearReconnectTimer();
 });

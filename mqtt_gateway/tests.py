@@ -1,7 +1,10 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.urls import reverse
+from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import AccessToken
 
 from devices.constants import DeviceType
 from devices.models import Device
@@ -85,3 +88,45 @@ class SceneRuleExecutionTests(TestCase):
         self.assertTrue(
             SystemLog.objects.filter(source="SCENE_RULE", data__rule_id=self.rule.id).exists()
         )
+
+
+class RealtimeStreamSecurityTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.user = user_model.objects.create_user(
+            username="stream_user",
+            password="pass123456",
+        )
+        self.access = str(AccessToken.for_user(self.user))
+        self.client = APIClient()
+        self.stream_token_url = reverse("realtime-stream-token")
+        self.stream_url = reverse("realtime-stream")
+
+    def _auth(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access}")
+
+    def test_stream_token_endpoint_requires_auth(self):
+        res = self.client.get(self.stream_token_url)
+        self.assertEqual(res.status_code, 401)
+
+    def test_stream_token_can_be_used_once(self):
+        self._auth()
+        issue = self.client.get(self.stream_token_url)
+        self.assertEqual(issue.status_code, 200)
+        token = issue.data["stream_token"]
+        self.assertTrue(token)
+
+        first = self.client.get(self.stream_url, {"stream_token": token})
+        self.assertEqual(first.status_code, 200)
+
+        second = self.client.get(self.stream_url, {"stream_token": token})
+        self.assertEqual(second.status_code, 401)
+
+    def test_legacy_query_access_token_is_disabled_by_default(self):
+        legacy = self.client.get(self.stream_url, {"access_token": self.access})
+        self.assertEqual(legacy.status_code, 401)
+
+    @override_settings(REALTIME_STREAM_ALLOW_LEGACY_ACCESS_TOKEN_QUERY=True)
+    def test_legacy_query_access_token_can_be_enabled_explicitly(self):
+        legacy = self.client.get(self.stream_url, {"access_token": self.access})
+        self.assertEqual(legacy.status_code, 200)
