@@ -199,6 +199,7 @@
         </div>
       </div>
       <div class="dialog-footer">
+        <div v-if="errorMessage" class="dialog-error">{{ errorMessage }}</div>
         <button class="btn btn-ghost" @click="onClose">取消</button>
         <button class="btn btn-primary" @click="onSubmit">保存</button>
       </div>
@@ -214,12 +215,14 @@ import type { SceneRule } from "@/store/scenes";
 const props = defineProps<{
   rule: SceneRule | null;
   devices: Device[];
+  errorMessage?: string;
 }>();
 
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "submit", payload: Partial<SceneRule>): void;
   (e: "error", message: string): void;
+  (e: "clear-error"): void;
 }>();
 
 const sensorDevices = computed(() =>
@@ -325,6 +328,14 @@ watch(
   { immediate: true }
 );
 
+watch(
+  () => ({ ...form }),
+  () => {
+    emit("clear-error");
+  },
+  { deep: true }
+);
+
 const onTriggerTypeChange = () => {
   if (form.trigger_type !== "TIME_STATE") {
     form.trigger_time_start = "";
@@ -344,6 +355,7 @@ const onActionTypeChange = () => {
 };
 
 const onClose = () => emit("close");
+const errorMessage = computed(() => props.errorMessage || "");
 
 const onSubmit = () => {
   // 构建 trigger_value
@@ -415,6 +427,19 @@ const onSubmit = () => {
 </script>
 
 <style scoped>
+.dialog-error {
+  margin-right: auto;
+  max-width: 70%;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
 .time-state-block .time-state-hint {
   margin-bottom: 12px;
   padding: 10px 12px;

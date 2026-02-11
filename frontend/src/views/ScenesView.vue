@@ -70,9 +70,11 @@
       v-if="showDialog"
       :rule="editingRule"
       :devices="devices.list"
+      :error-message="ruleErrorMessage"
       @close="closeDialog"
       @submit="onSubmitRule"
       @error="onRuleError"
+      @clear-error="onClearRuleError"
     />
   </section>
 </template>
@@ -88,6 +90,7 @@ const devices = useDevicesStore();
 
 const showDialog = ref(false);
 const editingRule = ref<SceneRule | null>(null);
+const ruleErrorMessage = ref("");
 
 onMounted(async () => {
   await Promise.all([scenes.fetchScenes(), devices.fetchDevices()]);
@@ -146,39 +149,60 @@ const formatTime = (timestamp: string) => {
 
 const openCreate = () => {
   editingRule.value = null;
+  ruleErrorMessage.value = "";
   showDialog.value = true;
 };
 
 const openEdit = (rule: SceneRule) => {
   editingRule.value = rule;
+  ruleErrorMessage.value = "";
   showDialog.value = true;
 };
 
 const closeDialog = () => {
+  ruleErrorMessage.value = "";
   showDialog.value = false;
 };
 
 const onSubmitRule = async (payload: Partial<SceneRule>) => {
+  ruleErrorMessage.value = "";
   try {
     if (editingRule.value?.id) {
       await scenes.updateScene(editingRule.value.id, payload);
     } else {
       await scenes.createScene(payload);
     }
+    ruleErrorMessage.value = "";
     showDialog.value = false;
   } catch (err: any) {
-    const msg = err?.response?.data?.trigger_device?.[0]
-      || err?.response?.data?.action_device?.[0]
-      || err?.response?.data?.trigger_value?.[0]
-      || err?.response?.data?.trigger_time_start?.[0]
-      || err?.response?.data?.detail
-      || (typeof err?.response?.data === "object" ? JSON.stringify(err.response.data) : err?.message || "保存失败");
+    const data = err?.response?.data;
+    const conflictText = Array.isArray(data?.conflicts)
+      ? data.conflicts
+          .map((item: any) => item?.message)
+          .filter((msg: unknown) => typeof msg === "string" && msg.length > 0)
+          .join("\n")
+      : "";
+    const nonFieldText = Array.isArray(data?.non_field_errors)
+      ? data.non_field_errors.join("\n")
+      : "";
+    const msg = conflictText
+      || nonFieldText
+      || data?.trigger_device?.[0]
+      || data?.action_device?.[0]
+      || data?.trigger_value?.[0]
+      || data?.trigger_time_start?.[0]
+      || data?.detail
+      || (typeof data === "object" ? JSON.stringify(data) : err?.message || "保存失败");
     onRuleError(msg);
   }
 };
 
 const onRuleError = (message: string) => {
-  if (typeof window !== "undefined" && window.alert) window.alert(message);
+  ruleErrorMessage.value = message || "保存失败";
+};
+
+const onClearRuleError = () => {
+  ruleErrorMessage.value = "";
 };
 
 const toggleEnabled = async (rule: SceneRule) => {
