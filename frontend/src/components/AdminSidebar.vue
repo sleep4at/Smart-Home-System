@@ -16,7 +16,9 @@
         :title="item.label"
         :class="$route.name === item.route ? 'active' : 'inactive'"
       >
-        <span class="icon" aria-hidden="true">{{ item.icon }}</span>
+        <span class="icon" aria-hidden="true">
+          <SidebarIcon :name="item.icon" />
+        </span>
         <span class="sidebar-label">{{ item.label }}</span>
       </RouterLink>
     </nav>
@@ -25,15 +27,16 @@
 
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
+import SidebarIcon from "@/components/SidebarIcon.vue";
 
 defineProps<{ collapsed: boolean }>();
 defineEmits<{ (e: "toggle"): void }>();
 
 const items = [
-  { route: "admin-users", label: "用户管理", icon: "◉" },
-  { route: "admin-devices", label: "设备管理", icon: "▣" },
-  { route: "admin-email-alerts", label: "邮件告警", icon: "✉" },
-  { route: "admin-debug-tools", label: "调试工具", icon: "⚒" },
-  { route: "admin-console", label: "日志信息", icon: "▤" },
+  { route: "admin-users", label: "用户管理", icon: "users" },
+  { route: "admin-devices", label: "设备管理", icon: "devices" },
+  { route: "admin-email-alerts", label: "邮件告警", icon: "mail" },
+  { route: "admin-debug-tools", label: "调试工具", icon: "debug" },
+  { route: "admin-console", label: "日志信息", icon: "logs" },
 ];
 </script>

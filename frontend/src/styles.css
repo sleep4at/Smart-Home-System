@@ -292,14 +292,24 @@ button {
   font-size: 14px;
 }
 
-.sidebar-item span.icon {
+.sidebar-item .icon {
   width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  text-align: center;
-  font-size: 18px;
-  line-height: 1;
+  color: #4b5563;
+  flex-shrink: 0;
+}
+
+.sidebar-item .icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.sidebar-item.active .icon {
+  color: #1d4ed8;
 }
 
 .sidebar-item.inactive {

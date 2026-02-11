@@ -18,7 +18,9 @@
           $route.name === item.route ? 'active' : 'inactive',
         ]"
       >
-        <span class="icon" aria-hidden="true">{{ item.icon }}</span>
+        <span class="icon" aria-hidden="true">
+          <SidebarIcon :name="item.icon" />
+        </span>
         <span class="sidebar-label">{{ item.label }}</span>
       </RouterLink>
     </nav>
@@ -26,7 +28,8 @@
 </template>
 
 <script setup lang="ts">
-import { RouterLink, useRoute } from "vue-router";
+import { RouterLink } from "vue-router";
+import SidebarIcon from "@/components/SidebarIcon.vue";
 
 defineProps<{
   collapsed: boolean;
@@ -36,12 +39,10 @@ defineEmits<{
   (e: "toggle"): void;
 }>();
 
-const route = useRoute();
-
 const items = [
-  { route: "home", label: "主页", icon: "⌂" },
-  { route: "history", label: "历史数据", icon: "◷" },
-  { route: "energy", label: "能耗分析", icon: "↯" },
-  { route: "scenes", label: "场景模式", icon: "◈" },
+  { route: "home", label: "主页", icon: "home" },
+  { route: "history", label: "历史数据", icon: "history" },
+  { route: "energy", label: "能耗分析", icon: "energy" },
+  { route: "scenes", label: "场景模式", icon: "scenes" },
 ];
 </script>
