@@ -95,6 +95,34 @@ function toNumberOrNull(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+const BATTERY_EMPTY_V = 3.0;
+const BATTERY_FULL_V = 4.15;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function voltageToBatteryPercent(voltage: number): number {
+  const normalized = ((voltage - BATTERY_EMPTY_V) / (BATTERY_FULL_V - BATTERY_EMPTY_V)) * 100;
+  return Math.round(clamp(normalized, 0, 100) * 10) / 10;
+}
+
+function batteryVoltageFromData(data: Record<string, unknown>): number | null {
+  return toNumberOrNull(data.battery_v ?? data.battery_voltage ?? data.battery);
+}
+
+function batteryPercentFromData(data: Record<string, unknown>): number | null {
+  const rawPercent = toNumberOrNull(
+    data.battery_pct ?? data.battery_percent ?? data.batteryPercentage
+  );
+  if (rawPercent !== null) {
+    return Math.round(clamp(rawPercent, 0, 100) * 10) / 10;
+  }
+  const voltage = batteryVoltageFromData(data);
+  if (voltage === null) return null;
+  return voltageToBatteryPercent(voltage);
+}
+
 function inferSwitchOn(
   data: Record<string, unknown>,
   previous: boolean | null
@@ -232,11 +260,61 @@ const chartOption = computed(() => {
   if (isTempHumi) {
     const temperatures = parsedPoints.value.map((p) => [p.t, toNumberOrNull(p.data?.temp)]);
     const humidities = parsedPoints.value.map((p) => [p.t, toNumberOrNull(p.data?.humi)]);
+    const batteryPercents = parsedPoints.value.map((p) => [p.t, batteryPercentFromData(p.data)]);
+    const hasBatteryData = batteryPercents.some((item) => item[1] !== null);
+    const legendData = ["温度(°C)", "湿度(%RH)"];
+    const yAxis: any[] = [
+      { type: "value", name: "温度(°C)", position: "left" },
+      { type: "value", name: "湿度(%RH)", position: "right" },
+    ];
+    const series: any[] = [
+      {
+        name: "温度(°C)",
+        type: "line",
+        data: temperatures,
+        smooth: true,
+        connectNulls: true,
+        showSymbol: false,
+        itemStyle: { color: "#ef4444" },
+      },
+      {
+        name: "湿度(%RH)",
+        type: "line",
+        yAxisIndex: 1,
+        data: humidities,
+        smooth: true,
+        connectNulls: true,
+        showSymbol: false,
+        itemStyle: { color: "#3b82f6" },
+      },
+    ];
+    if (hasBatteryData) {
+      legendData.push("电量(%)");
+      yAxis.push({
+        type: "value",
+        name: "电量(%)",
+        position: "right",
+        offset: 64,
+        min: 0,
+        max: 100,
+        axisLabel: { formatter: "{value}%" },
+      });
+      series.push({
+        name: "电量(%)",
+        type: "line",
+        yAxisIndex: 2,
+        data: batteryPercents,
+        smooth: true,
+        connectNulls: true,
+        showSymbol: false,
+        itemStyle: { color: "#f59e0b" },
+      });
+    }
     return {
       title: { text: `${device.name} - 温湿度历史`, left: "center" },
       tooltip: { trigger: "axis" },
-      legend: { data: ["温度(°C)", "湿度(%RH)"], bottom: "2%" },
-      grid: { left: "3%", right: "4%", bottom: "22%", containLabel: true },
+      legend: { data: legendData, bottom: "2%" },
+      grid: { left: "3%", right: hasBatteryData ? "12%" : "4%", bottom: "22%", containLabel: true },
       xAxis: {
         type: "time",
         min: xAxisRange.value.min,
@@ -249,32 +327,9 @@ const chartOption = computed(() => {
           },
         },
       },
-      yAxis: [
-        { type: "value", name: "温度(°C)", position: "left" },
-        { type: "value", name: "湿度(%RH)", position: "right" },
-      ],
+      yAxis,
       dataZoom: getDataZoomOptions(),
-      series: [
-        {
-          name: "温度(°C)",
-          type: "line",
-          data: temperatures,
-          smooth: true,
-          connectNulls: true,
-          showSymbol: false,
-          itemStyle: { color: "#ef4444" },
-        },
-        {
-          name: "湿度(%RH)",
-          type: "line",
-          yAxisIndex: 1,
-          data: humidities,
-          smooth: true,
-          connectNulls: true,
-          showSymbol: false,
-          itemStyle: { color: "#3b82f6" },
-        },
-      ],
+      series,
     };
   }
   if (isSwitch) {

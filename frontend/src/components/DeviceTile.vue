@@ -20,6 +20,9 @@
         <div class="metric-sub">
           {{ humidityText }}
         </div>
+        <div class="metric-sub metric-sub-secondary">
+          {{ batteryText }}
+        </div>
       </div>
       <div v-else-if="isAC" class="device-metrics">
         <div class="metric-main">
@@ -251,6 +254,50 @@ const humidityText = computed(() => {
   return h !== undefined ? `${h}%RH` : "暂无湿度数据";
 });
 
+const BATTERY_EMPTY_V = 3.0;
+const BATTERY_FULL_V = 4.2;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function voltageToPercent(voltage: number): number {
+  const normalized = ((voltage - BATTERY_EMPTY_V) / (BATTERY_FULL_V - BATTERY_EMPTY_V)) * 100;
+  return Math.round(clamp(normalized, 0, 100));
+}
+
+const batteryVoltage = computed(() => {
+  const state = props.device.current_state || {};
+  return numberOrNull(state.battery_v ?? state.battery_voltage ?? state.battery);
+});
+
+const batteryPercent = computed(() => {
+  const state = props.device.current_state || {};
+  const rawPercent = numberOrNull(
+    state.battery_pct ?? state.battery_percent ?? state.batteryPercentage
+  );
+  if (rawPercent !== null) return Math.round(clamp(rawPercent, 0, 100));
+  if (batteryVoltage.value === null) return null;
+  return voltageToPercent(batteryVoltage.value);
+});
+
+const batteryText = computed(() => {
+  const pct = batteryPercent.value;
+  const voltage = batteryVoltage.value;
+  if (pct !== null && voltage !== null) {
+    return `电量 ${pct}% · ${voltage.toFixed(2)}V`;
+  }
+  if (pct !== null) return `电量 ${pct}%`;
+  if (voltage !== null) return `电压 ${voltage.toFixed(2)}V`;
+  return "暂无电量数据";
+});
+
 const lightText = computed(() => {
   const l = props.device.current_state?.light;
   return l !== undefined && l !== null ? `${l} Lux` : "暂无光照数据";
@@ -425,5 +472,8 @@ const setSpeed = async (speed: 1 | 2 | 3) => {
   background: #dbeafe;
   color: #1d4ed8;
 }
-</style>
 
+.metric-sub-secondary {
+  font-size: 12px;
+}
+</style>
