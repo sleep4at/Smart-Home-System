@@ -29,6 +29,30 @@ def mqtt_transport_label() -> str:
     return "mqtts (TLS)" if mqtt_use_tls() else "mqtt (no TLS)"
 
 
+def _sanitize_client_id_part(value: str, fallback: str) -> str:
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
+    cleaned = "".join(ch if ch in allowed else "-" for ch in (value or "").strip())
+    cleaned = cleaned.strip("-")
+    return cleaned or fallback
+
+
+def build_sim_client_id(device_kind: str, device_id: int) -> str:
+    """
+    生成模拟设备 ClientID：<prefix>-<kind>-id<id>
+    - prefix 来自 SIM_MQTT_CLIENT_ID_PREFIX（默认 simdev）
+    - kind 建议传脚本对应设备类型（如 ac/fan/lamp/temp-humi）
+    """
+    prefix = _sanitize_client_id_part(os.getenv("SIM_MQTT_CLIENT_ID_PREFIX", "simdev"), "simdev")
+    kind = _sanitize_client_id_part(device_kind, "device")
+    try:
+        did = int(device_id)
+    except (TypeError, ValueError):
+        did = 0
+    client_id = f"{prefix}-{kind}-id{did}"
+    # 为兼容常见 broker，保守截断长度
+    return client_id[:64]
+
+
 def is_interactive_session(default: bool = True) -> bool:
     """
     是否启用键盘交互模式。
