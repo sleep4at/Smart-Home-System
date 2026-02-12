@@ -26,6 +26,16 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in ('1', 'true', 'yes', 'on')
 
 
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == '':
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -222,6 +232,11 @@ MQTT_CONFIG = {
     'CERTFILE': os.getenv('MQTT_CERTFILE') or None,
     'KEYFILE': os.getenv('MQTT_KEYFILE') or None,
     'TLS_INSECURE': os.getenv('MQTT_TLS_INSECURE', 'False').lower() in ('true', '1', 'yes'),
+    # MQTT ClientID（固定前缀 + 自动后缀；也可分别显式指定）
+    'CLIENT_ID_PREFIX': os.getenv('MQTT_CLIENT_ID_PREFIX', 'smarthome'),
+    'CLIENT_ID_SUFFIX_LEN': _env_int('MQTT_CLIENT_ID_SUFFIX_LEN', 6),
+    'CLIENT_ID_GATEWAY': os.getenv('MQTT_CLIENT_ID_GATEWAY') or None,
+    'CLIENT_ID_API': os.getenv('MQTT_CLIENT_ID_API') or None,
 }
 
 # ==== Email ====

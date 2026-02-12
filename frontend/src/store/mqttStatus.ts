@@ -4,7 +4,8 @@ import api from "@/utils/http";
 export const useMqttStatusStore = defineStore("mqttStatus", {
   state: () => ({
     connected: false,
-    loading: false,
+    // 首次进入页面先显示“检查中”，避免刷新瞬间出现误导性的红色未连接。
+    loading: true,
     lastChecked: null as number | null,
   }),
   actions: {

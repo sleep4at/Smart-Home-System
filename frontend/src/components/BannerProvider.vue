@@ -132,6 +132,7 @@ function openRealtimeStream() {
       if (requestId !== connectRequestId || !auth.isAuthenticated) return;
       const streamToken = (res.data?.stream_token ?? "").trim();
       if (!streamToken) {
+        mqttStatus.setConnected(false);
         scheduleReconnect();
         return;
       }
@@ -172,12 +173,14 @@ function openRealtimeStream() {
       });
 
       stream.onerror = () => {
+        mqttStatus.setConnected(false);
         closeStream();
         scheduleReconnect();
       };
     })
     .catch(() => {
       if (requestId !== connectRequestId) return;
+      mqttStatus.setConnected(false);
       scheduleReconnect();
     });
 }

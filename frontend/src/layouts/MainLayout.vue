@@ -11,7 +11,7 @@
               {{ auth.isAdmin ? "管理员" : "普通用户" }}
             </span>
             ）
-            <span class="mqtt-indicator" :class="mqtt.connected ? 'connected' : 'disconnected'">
+            <span class="mqtt-indicator" :class="mqtt.loading ? 'checking' : (mqtt.connected ? 'connected' : 'disconnected')">
               <span class="mqtt-dot" />
               {{ mqtt.loading ? "检查中…" : (mqtt.connected ? "MQTT 已连接" : "MQTT 未连接") }}
             </span>
@@ -77,6 +77,10 @@ const onLogout = () => {
   --mqtt-bg: #ecfdf5;
   --mqtt-fg: #059669;
 }
+.mqtt-indicator.checking {
+  --mqtt-bg: #eff6ff;
+  --mqtt-fg: #2563eb;
+}
 .mqtt-indicator.disconnected {
   --mqtt-bg: #fef2f2;
   --mqtt-fg: #dc2626;
@@ -89,6 +93,9 @@ const onLogout = () => {
 }
 .mqtt-indicator.connected .mqtt-dot {
   box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.3);
+}
+.mqtt-indicator.checking .mqtt-dot {
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
 }
 .mqtt-indicator.disconnected .mqtt-dot {
   box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.3);

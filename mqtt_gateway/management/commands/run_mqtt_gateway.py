@@ -16,6 +16,7 @@ from django.utils import timezone
 from devices.constants import DeviceType
 from devices.models import Device, DeviceData
 from logs_app.models import SystemLog
+from mqtt_gateway.utils import _apply_tls, build_mqtt_client_id
 from scenes.models import SceneRule
 
 
@@ -260,13 +261,14 @@ class Command(BaseCommand):
         #     except Exception as e:
         #         self.stdout.write(self.style.ERROR(f"处理消息出错: {e}"))
 
-        client = mqtt.Client()
+        client_id = build_mqtt_client_id(config, role="gateway")
+        client = mqtt.Client(client_id=client_id)
         if config.get("USERNAME"):
             client.username_pw_set(config["USERNAME"], config.get("PASSWORD", ""))
 
         # TLS / mqtts
-        from mqtt_gateway.utils import _apply_tls
         _apply_tls(client, config)
+        self.stdout.write(f"MQTT 客户端 ID: {client_id}")
 
         client.on_connect = on_connect
         client.on_message = on_message
