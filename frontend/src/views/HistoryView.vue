@@ -95,32 +95,26 @@ function toNumberOrNull(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function toFixedOneDecimalOrNull(value: unknown): number | null {
+  const n = toNumberOrNull(value);
+  if (n === null) return null;
+  return Math.round(n * 10) / 10;
+}
+
 const BATTERY_EMPTY_V = 3.0;
-const BATTERY_FULL_V = 4.15;
+const BATTERY_FULL_V = 4.2;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function voltageToBatteryPercent(voltage: number): number {
-  const normalized = ((voltage - BATTERY_EMPTY_V) / (BATTERY_FULL_V - BATTERY_EMPTY_V)) * 100;
-  return Math.round(clamp(normalized, 0, 100) * 10) / 10;
-}
-
-function batteryVoltageFromData(data: Record<string, unknown>): number | null {
-  return toNumberOrNull(data.battery_v ?? data.battery_voltage ?? data.battery);
-}
-
 function batteryPercentFromData(data: Record<string, unknown>): number | null {
-  const rawPercent = toNumberOrNull(
-    data.battery_pct ?? data.battery_percent ?? data.batteryPercentage
-  );
-  if (rawPercent !== null) {
-    return Math.round(clamp(rawPercent, 0, 100) * 10) / 10;
-  }
-  const voltage = batteryVoltageFromData(data);
-  if (voltage === null) return null;
-  return voltageToBatteryPercent(voltage);
+  const pct = toNumberOrNull(data.battery_pct ?? data.battery_percent ?? data.batteryPercentage);
+  if (pct !== null) return Math.round(clamp(pct, 0, 100) * 10) / 10;
+  const v = toNumberOrNull(data.battery_v ?? data.battery_voltage ?? data.battery);
+  if (v === null) return null;
+  const normalized = ((v - BATTERY_EMPTY_V) / (BATTERY_FULL_V - BATTERY_EMPTY_V)) * 100;
+  return Math.round(clamp(normalized, 0, 100) * 10) / 10;
 }
 
 function inferSwitchOn(
@@ -258,63 +252,44 @@ const chartOption = computed(() => {
   const isSwitch = ["LAMP_SWITCH", "AC_SWITCH", "FAN_SWITCH"].includes(device.type);
 
   if (isTempHumi) {
-    const temperatures = parsedPoints.value.map((p) => [p.t, toNumberOrNull(p.data?.temp)]);
-    const humidities = parsedPoints.value.map((p) => [p.t, toNumberOrNull(p.data?.humi)]);
+    const temperatures = parsedPoints.value.map((p) => [p.t, toFixedOneDecimalOrNull(p.data?.temp)]);
+    const humidities = parsedPoints.value.map((p) => [p.t, toFixedOneDecimalOrNull(p.data?.humi)]);
     const batteryPercents = parsedPoints.value.map((p) => [p.t, batteryPercentFromData(p.data)]);
-    const hasBatteryData = batteryPercents.some((item) => item[1] !== null);
-    const legendData = ["温度(°C)", "湿度(%RH)"];
-    const yAxis: any[] = [
-      { type: "value", name: "温度(°C)", position: "left" },
-      { type: "value", name: "湿度(%RH)", position: "right" },
-    ];
-    const series: any[] = [
-      {
-        name: "温度(°C)",
-        type: "line",
-        data: temperatures,
-        smooth: true,
-        connectNulls: true,
-        showSymbol: false,
-        itemStyle: { color: "#ef4444" },
-      },
-      {
-        name: "湿度(%RH)",
-        type: "line",
-        yAxisIndex: 1,
-        data: humidities,
-        smooth: true,
-        connectNulls: true,
-        showSymbol: false,
-        itemStyle: { color: "#3b82f6" },
-      },
-    ];
-    if (hasBatteryData) {
-      legendData.push("电量(%)");
-      yAxis.push({
-        type: "value",
-        name: "电量(%)",
-        position: "right",
-        offset: 64,
-        min: 0,
-        max: 100,
-        axisLabel: { formatter: "{value}%" },
-      });
-      series.push({
-        name: "电量(%)",
-        type: "line",
-        yAxisIndex: 2,
-        data: batteryPercents,
-        smooth: true,
-        connectNulls: true,
-        showSymbol: false,
-        itemStyle: { color: "#f59e0b" },
-      });
-    }
+    const hasBattery = batteryPercents.some(([, v]) => v !== null);
     return {
       title: { text: `${device.name} - 温湿度历史`, left: "center" },
-      tooltip: { trigger: "axis" },
-      legend: { data: legendData, bottom: "2%" },
-      grid: { left: "3%", right: hasBatteryData ? "12%" : "4%", bottom: "22%", containLabel: true },
+      tooltip: {
+        trigger: "axis",
+        formatter: (params: any[]) => {
+          if (!Array.isArray(params) || params.length === 0) return "";
+          const axisValue = params[0]?.axisValue;
+          const timeStr = typeof axisValue === "number"
+            ? new Date(axisValue).toLocaleString("zh-CN", {
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : String(axisValue ?? "");
+
+          const lines: string[] = [timeStr];
+          for (const p of params) {
+            const seriesName = String(p?.seriesName ?? "");
+            const value = Array.isArray(p?.data) ? p.data[1] : p?.data;
+            if (value === null || value === undefined || value === "") continue;
+            if (seriesName === "温度(°C)") {
+              lines.push(`温度：${value}°C`);
+            } else if (seriesName === "湿度(%RH)") {
+              lines.push(`湿度：${value}%RH`);
+            } else if (seriesName === "电量(%)") {
+              lines.push(`电量：${value}%`);
+            }
+          }
+          return lines.join("<br/>");
+        },
+      },
+      legend: { data: ["温度(°C)", "湿度(%RH)"], bottom: "2%" },
+      grid: { left: "3%", right: "4%", bottom: "22%", containLabel: true },
       xAxis: {
         type: "time",
         min: xAxisRange.value.min,
@@ -327,9 +302,46 @@ const chartOption = computed(() => {
           },
         },
       },
-      yAxis,
+      yAxis: [
+        { type: "value", name: "温度(°C)", position: "left" },
+        { type: "value", name: "湿度(%RH)", position: "right" },
+        // 电量使用隐藏坐标轴，不在界面显示电量纵轴。
+        { type: "value", min: 0, max: 100, show: false },
+      ],
       dataZoom: getDataZoomOptions(),
-      series,
+      series: [
+        {
+          name: "温度(°C)",
+          type: "line",
+          data: temperatures,
+          smooth: true,
+          connectNulls: true,
+          showSymbol: false,
+          itemStyle: { color: "#ef4444" },
+        },
+        {
+          name: "湿度(%RH)",
+          type: "line",
+          yAxisIndex: 1,
+          data: humidities,
+          smooth: true,
+          connectNulls: true,
+          showSymbol: false,
+          itemStyle: { color: "#3b82f6" },
+        },
+        {
+          name: "电量(%)",
+          type: "line",
+          yAxisIndex: 2,
+          data: batteryPercents,
+          smooth: true,
+          connectNulls: true,
+          showSymbol: false,
+          lineStyle: { width: 1.5, type: "dashed", opacity: hasBattery ? 0.9 : 0 },
+          itemStyle: { color: "#f59e0b", opacity: hasBattery ? 0.9 : 0 },
+          emphasis: { lineStyle: { width: 2 } },
+        },
+      ],
     };
   }
   if (isSwitch) {

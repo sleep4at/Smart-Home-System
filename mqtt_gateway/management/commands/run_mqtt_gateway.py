@@ -297,8 +297,32 @@ class Command(BaseCommand):
             parts.append(f"光照 {payload['light']}Lux")
         if "pressure" in payload:
             parts.append(f"气压 {payload['pressure']}hPa")
+        if "battery_v" in payload:
+            parts.append(f"电池电压 {payload['battery_v']}V")
+        elif "battery_voltage" in payload:
+            parts.append(f"电池电压 {payload['battery_voltage']}V")
+        elif "battery" in payload:
+            parts.append(f"电池电压 {payload['battery']}V")
+        if "battery_pct" in payload:
+            parts.append(f"电量 {payload['battery_pct']}%")
+        elif "battery_percent" in payload:
+            parts.append(f"电量 {payload['battery_percent']}%")
+
+        skip_keys = {
+            "temp",
+            "humi",
+            "on",
+            "speed",
+            "light",
+            "pressure",
+            "battery_v",
+            "battery_voltage",
+            "battery",
+            "battery_pct",
+            "battery_percent",
+        }
         for k, v in payload.items():
-            if k in ("temp", "humi", "on", "speed", "light", "pressure"):
+            if k in skip_keys:
                 continue
             parts.append(f"{k}={v}")
         if not parts:

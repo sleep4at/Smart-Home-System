@@ -31,7 +31,7 @@
         <span class="debug-source">{{ log.source }}</span>
         <span class="debug-message">{{ log.message }}</span>
         <span v-if="log.data && Object.keys(log.data).length" class="debug-data">
-          {{ formatData(log.data) }}
+          {{ formatData(log.source, log.data) }}
         </span>
       </div>
       <div v-if="!filteredLogs.length" class="debug-empty">暂无日志</div>
@@ -60,8 +60,15 @@ function formatTime(timestamp: string) {
   return `${y}-${M}-${D} ${h}:${m}:${s}`;
 }
 
-function formatData(data: Record<string, unknown>) {
+function formatData(source: string, data: Record<string, unknown>) {
   if (!data || typeof data !== "object") return "";
+  const topic = typeof data.topic === "string" ? data.topic : "";
+
+  // MQTT 设备上报详情已经放在 message 中，这里只保留主题，避免重复长串。
+  if (source === "MQTT_GATEWAY") {
+    return topic ? ` | 主题 ${topic}` : "";
+  }
+
   const parts: string[] = [];
   if (data.payload && typeof data.payload === "object") {
     const p = data.payload as Record<string, unknown>;
@@ -71,15 +78,17 @@ function formatData(data: Record<string, unknown>) {
         if (k === "humi" && v != null) return `湿度 ${v}%`;
         if (k === "light" && v != null) return `光照 ${v}Lux`;
         if (k === "pressure" && v != null) return `气压 ${v}hPa`;
-        if (k === "on" && v != null) return v ? "开" : "关";
+        if (k === "battery_v" && v != null) return `电池电压 ${v}V`;
+        if (k === "battery_pct" && v != null) return `电量 ${v}%`;
+        if (k === "on" && v != null) return `状态 ${v ? "开" : "关"}`;
         if (k === "speed" && v != null) return `档位 ${v}`;
         return `${k}=${v}`;
       })
       .filter(Boolean);
     if (kv.length) parts.push(kv.join(", "));
   }
-  if (data.topic) parts.push(String(data.topic));
-  return parts.length ? " | " + parts.join(" ") : "";
+  if (topic) parts.push(`主题 ${topic}`);
+  return parts.length ? " | " + parts.join("；") : "";
 }
 
 function refreshLogs() {
