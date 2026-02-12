@@ -122,7 +122,7 @@ class Command(BaseCommand):
                         tls_label = " (TLS)" if config.get("USE_TLS") else " (no TLS)"
                         lwt_msg = f"设备 [{device.name}] 已上线{tls_label}"
                     else:
-                        lwt_msg = f"警告：设备 [{device.name}] 离线"
+                        lwt_msg = f"设备 [{device.name}] 离线"
                     SystemLog.objects.create(
                         level=SystemLog.LEVEL_WARN if not is_online else SystemLog.LEVEL_INFO,
                         source="MQTT_LWT",

@@ -8,17 +8,24 @@
 import json
 import os
 import random
+import signal
 import threading
 import time
 
 import paho.mqtt.client as mqtt
 
 try:
-    from _env import load_dotenv_from_project_root, apply_tls, mqtt_transport_label
+    from _env import (
+        load_dotenv_from_project_root,
+        apply_tls,
+        mqtt_transport_label,
+        is_interactive_session,
+    )
     load_dotenv_from_project_root()
 except Exception:
     apply_tls = None
     mqtt_transport_label = lambda: "mqtt (明文)"
+    is_interactive_session = lambda default=True: default
 
 # ========== 配置（环境变量，来自 .env）==========
 MQTT_BROKER = os.getenv("MQTT_HOST", "127.0.0.1")
@@ -46,6 +53,15 @@ def main():
     energy_wh_total = max(0.0, INITIAL_ENERGY_WH)
     last_power_ts = time.time()
     stop_event = threading.Event()
+
+    def _handle_stop(_signum, _frame):
+        stop_event.set()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(sig, _handle_stop)
+        except Exception:
+            pass
 
     def calc_power_w():
         if not state.get("on"):
@@ -109,28 +125,39 @@ def main():
     power_thread = threading.Thread(target=power_loop, daemon=True)
     power_thread.start()
 
-    print("键盘控制: 输入 ON 开灯 / OFF 关灯，回车发送（输入 q 退出）")
-    try:
-        while True:
-            line = input("> ").strip().upper()
-            if not line:
-                continue
-            if line == "Q" or line == "QUIT":
-                break
-            if line == "ON":
-                state["on"] = True
-                client.publish(topic_state, json.dumps(state), qos=1)
-                publish_power_snapshot()
-                print("  -> 已上报: 开灯", state)
-            elif line == "OFF":
-                state["on"] = False
-                client.publish(topic_state, json.dumps(state), qos=1)
-                publish_power_snapshot()
-                print("  -> 已上报: 关灯", state)
-            else:
-                print("  未知命令，请输入 ON / OFF")
-    except (KeyboardInterrupt, EOFError):
-        pass
+    if is_interactive_session(default=True):
+        print("键盘控制: 输入 ON 开灯 / OFF 关灯，回车发送（输入 q 退出）")
+        try:
+            while not stop_event.is_set():
+                try:
+                    line = input("> ").strip().upper()
+                except EOFError:
+                    break
+                if not line:
+                    continue
+                if line == "Q" or line == "QUIT":
+                    break
+                if line == "ON":
+                    state["on"] = True
+                    client.publish(topic_state, json.dumps(state), qos=1)
+                    publish_power_snapshot()
+                    print("  -> 已上报: 开灯", state)
+                elif line == "OFF":
+                    state["on"] = False
+                    client.publish(topic_state, json.dumps(state), qos=1)
+                    publish_power_snapshot()
+                    print("  -> 已上报: 关灯", state)
+                else:
+                    print("  未知命令，请输入 ON / OFF")
+        except KeyboardInterrupt:
+            pass
+    else:
+        print("非交互模式运行（SIM_INTERACTIVE=false 或无终端），等待后端 cmd 指令...")
+        try:
+            while not stop_event.wait(1.0):
+                pass
+        except KeyboardInterrupt:
+            pass
     stop_event.set()
     power_thread.join(timeout=1)
     publish_power_snapshot()

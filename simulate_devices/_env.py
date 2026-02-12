@@ -4,6 +4,7 @@
 """
 import os
 import ssl
+import sys
 from pathlib import Path
 
 # 项目根目录（Demo_1），用于解析 .env 中的相对证书路径
@@ -26,6 +27,24 @@ def mqtt_use_tls() -> bool:
 def mqtt_transport_label() -> str:
     """返回当前连接模式描述，用于日志/打印。"""
     return "mqtts (TLS)" if mqtt_use_tls() else "mqtt (no TLS)"
+
+
+def is_interactive_session(default: bool = True) -> bool:
+    """
+    是否启用键盘交互模式。
+    优先读取 SIM_INTERACTIVE；若未设置则根据 stdin 是否为 TTY 自动判断。
+    """
+    raw = os.getenv("SIM_INTERACTIVE")
+    if raw is not None:
+        value = raw.strip().lower()
+        if value in ("1", "true", "yes", "on"):
+            return True
+        if value in ("0", "false", "no", "off"):
+            return False
+    try:
+        return bool(sys.stdin.isatty())
+    except Exception:
+        return default
 
 
 def _resolve_cert_path(path: str | None) -> str | None:
