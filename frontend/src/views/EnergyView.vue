@@ -71,7 +71,12 @@
     <div class="energy-panel">
       <div class="energy-panel-title">功率曲线（W）</div>
       <div v-if="powerSeries.length" class="chart-wrap">
-        <v-chart :option="powerChartOption" :update-options="{ notMerge: true }" style="width: 100%; height: 100%;" />
+        <v-chart
+          :key="energyPowerChartRenderKey"
+          :option="powerChartOption"
+          :update-options="{ notMerge: true }"
+          style="width: 100%; height: 100%;"
+        />
       </div>
       <div v-else class="energy-empty">
         {{ loading ? "正在计算能耗..." : "当前范围暂无可展示数据" }}
@@ -81,7 +86,12 @@
     <div v-if="deviceBreakdown.length" class="energy-panel">
       <div class="energy-panel-title">设备耗电分项</div>
       <div class="chart-wrap-sm">
-        <v-chart :option="breakdownChartOption" :update-options="{ notMerge: true }" style="width: 100%; height: 100%;" />
+        <v-chart
+          :key="energyBreakdownChartRenderKey"
+          :option="breakdownChartOption"
+          :update-options="{ notMerge: true }"
+          style="width: 100%; height: 100%;"
+        />
       </div>
       <div class="energy-table-wrap">
         <table class="energy-table">
@@ -192,6 +202,8 @@ const loading = ref(false);
 const exportingCsv = ref(false);
 const loadError = ref("");
 const analysis = ref<EnergyAnalysisResponse | null>(null);
+const energyPowerChartRenderKey = ref(0);
+const energyBreakdownChartRenderKey = ref(0);
 let energyRequestSeq = 0;
 let energyAbortController: AbortController | null = null;
 
@@ -428,6 +440,8 @@ async function fetchEnergyAnalysis() {
     });
     if (requestSeq !== energyRequestSeq) return;
     analysis.value = res.data;
+    energyPowerChartRenderKey.value += 1;
+    energyBreakdownChartRenderKey.value += 1;
   } catch (error) {
     if (requestSeq !== energyRequestSeq || isCanceledError(error)) return;
     console.error("获取能耗分析失败:", error);

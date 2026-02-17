@@ -30,6 +30,7 @@
     </div>
     <div v-if="selectedDeviceId && chartData.length" class="history-chart-wrap">
       <v-chart
+        :key="historyChartRenderKey"
         :option="chartOption"
         :update-options="{ notMerge: true }"
         :autoresize="true"
@@ -73,6 +74,7 @@ const devices = useDevicesStore();
 const selectedDeviceId = ref<number>(0);
 const selectedRange = ref<string>("6h");
 const chartData = ref<{ timestamp: string; data: Record<string, unknown> }[]>([]);
+const historyChartRenderKey = ref(0);
 
 const isRefreshing = ref(false);
 const HISTORY_ANIMATION_THRESHOLD = 12000;
@@ -241,6 +243,7 @@ async function fetchHistory() {
     );
     if (requestSeq !== historyRequestSeq) return;
     chartData.value = res.data.points ?? [];
+    historyChartRenderKey.value += 1;
   } catch (error) {
     if (requestSeq !== historyRequestSeq || isCanceledError(error)) return;
     console.error("获取历史数据失败:", error);
