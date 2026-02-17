@@ -114,7 +114,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { use } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { LineChart, BarChart } from "echarts/charts";
@@ -192,6 +192,8 @@ const loading = ref(false);
 const exportingCsv = ref(false);
 const loadError = ref("");
 const analysis = ref<EnergyAnalysisResponse | null>(null);
+let energyRequestSeq = 0;
+let energyAbortController: AbortController | null = null;
 
 const total = computed<EnergyTotal>(() => {
   return (
@@ -395,20 +397,49 @@ function parseCsvFilename(contentDisposition?: string): string | null {
   return filenameBasic?.[1] ?? null;
 }
 
+function isCanceledError(error: unknown): boolean {
+  const e = error as { name?: string; code?: string };
+  return (
+    e?.name === "AbortError" ||
+    e?.name === "CanceledError" ||
+    e?.code === "ERR_CANCELED"
+  );
+}
+
+function cancelEnergyRequest() {
+  if (energyAbortController) {
+    energyAbortController.abort();
+    energyAbortController = null;
+  }
+}
+
 async function fetchEnergyAnalysis() {
+  const requestSeq = ++energyRequestSeq;
+  cancelEnergyRequest();
+  const controller = new AbortController();
+  energyAbortController = controller;
+
   loading.value = true;
   loadError.value = "";
   try {
     const res = await api.get<EnergyAnalysisResponse>("/api/energy/analysis/", {
       params: buildQueryParams(),
+      signal: controller.signal,
     });
+    if (requestSeq !== energyRequestSeq) return;
     analysis.value = res.data;
   } catch (error) {
+    if (requestSeq !== energyRequestSeq || isCanceledError(error)) return;
     console.error("获取能耗分析失败:", error);
     loadError.value = "获取能耗分析失败，请稍后重试。";
     analysis.value = null;
   } finally {
-    loading.value = false;
+    if (requestSeq === energyRequestSeq) {
+      if (energyAbortController === controller) {
+        energyAbortController = null;
+      }
+      loading.value = false;
+    }
   }
 }
 
@@ -457,6 +488,10 @@ onMounted(async () => {
   if (!devices.list.length) {
     await devices.fetchDevices();
   }
+});
+
+onUnmounted(() => {
+  cancelEnergyRequest();
 });
 </script>
 

@@ -43,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted } from "vue";
+import { computed, ref, watch, onMounted, onUnmounted } from "vue";
 import { use } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { LineChart, BarChart } from "echarts/charts";
@@ -75,6 +75,9 @@ const selectedRange = ref<string>("6h");
 const chartData = ref<{ timestamp: string; data: Record<string, unknown> }[]>([]);
 
 const isRefreshing = ref(false);
+const HISTORY_ANIMATION_THRESHOLD = 12000;
+let historyRequestSeq = 0;
+let historyAbortController: AbortController | null = null;
 
 type ParsedHistoryPoint = {
   t: number;
@@ -175,6 +178,22 @@ function getDataZoomOptions() {
   ];
 }
 
+function isCanceledError(error: unknown): boolean {
+  const e = error as { name?: string; code?: string };
+  return (
+    e?.name === "AbortError" ||
+    e?.name === "CanceledError" ||
+    e?.code === "ERR_CANCELED"
+  );
+}
+
+function cancelHistoryRequest() {
+  if (historyAbortController) {
+    historyAbortController.abort();
+    historyAbortController = null;
+  }
+}
+
 // --- 监听设备列表，实现默认选中 ---
 function syncSelectedDevice(newList: { id: number }[]) {
   if (!newList.length) {
@@ -199,27 +218,40 @@ watch(
 // ------------------------------------------
 
 async function fetchHistory() {
+  const requestSeq = ++historyRequestSeq;
+  cancelHistoryRequest();
+
   if (!selectedDeviceId.value) {
     chartData.value = [];
+    isRefreshing.value = false;
     return;
   }
 
-  isRefreshing.value = true;  // 开始加载
+  isRefreshing.value = true;
+  const controller = new AbortController();
+  historyAbortController = controller;
 
   try {
     const res = await api.get<{ points: { timestamp: string; data: Record<string, unknown> }[] }>(
       `/api/devices/${selectedDeviceId.value}/history/`,
-      { params: { range: selectedRange.value } }
+      {
+        params: { range: selectedRange.value },
+        signal: controller.signal,
+      }
     );
-    chartData.value = res.data.points || [];
+    if (requestSeq !== historyRequestSeq) return;
+    chartData.value = res.data.points ?? [];
   } catch (error) {
+    if (requestSeq !== historyRequestSeq || isCanceledError(error)) return;
     console.error("获取历史数据失败:", error);
     chartData.value = [];
   } finally {
-    // 模拟一个微小的延迟，防止闪烁
-    setTimeout(() => {
+    if (requestSeq === historyRequestSeq) {
+      if (historyAbortController === controller) {
+        historyAbortController = null;
+      }
       isRefreshing.value = false;
-    }, 300);
+    }
   }
 }
 
@@ -250,6 +282,17 @@ const chartOption = computed(() => {
   const device = selectedDevice.value;
   const isTempHumi = device.type === "TEMP_HUMI";
   const isSwitch = ["LAMP_SWITCH", "AC_SWITCH", "FAN_SWITCH"].includes(device.type);
+  const animationOptions = {
+    animation: true,
+    animationDuration: 450,
+    animationDurationUpdate: 320,
+    animationEasing: "cubicOut",
+    animationEasingUpdate: "cubicOut",
+    animationThreshold: Math.max(
+      HISTORY_ANIMATION_THRESHOLD,
+      parsedPoints.value.length + 100
+    ),
+  };
 
   if (isTempHumi) {
     const temperatures = parsedPoints.value.map((p) => [p.t, toFixedOneDecimalOrNull(p.data?.temp)]);
@@ -257,6 +300,7 @@ const chartOption = computed(() => {
     const batteryPercents = parsedPoints.value.map((p) => [p.t, batteryPercentFromData(p.data)]);
     const hasBattery = batteryPercents.some(([, v]) => v !== null);
     return {
+      ...animationOptions,
       title: { text: `${device.name} - 温湿度历史`, left: "center" },
       tooltip: {
         trigger: "axis",
@@ -317,6 +361,8 @@ const chartOption = computed(() => {
           smooth: true,
           connectNulls: true,
           showSymbol: false,
+          progressive: 0,
+          progressiveThreshold: 100000,
           itemStyle: { color: "#ef4444" },
         },
         {
@@ -327,6 +373,8 @@ const chartOption = computed(() => {
           smooth: true,
           connectNulls: true,
           showSymbol: false,
+          progressive: 0,
+          progressiveThreshold: 100000,
           itemStyle: { color: "#3b82f6" },
         },
         {
@@ -337,6 +385,8 @@ const chartOption = computed(() => {
           smooth: true,
           connectNulls: true,
           showSymbol: false,
+          progressive: 0,
+          progressiveThreshold: 100000,
           lineStyle: { width: 1.5, type: "dashed", opacity: hasBattery ? 0.9 : 0 },
           itemStyle: { color: "#f59e0b", opacity: hasBattery ? 0.9 : 0 },
           emphasis: { lineStyle: { width: 2 } },
@@ -355,6 +405,7 @@ const chartOption = computed(() => {
       states.push([p.t, current === null ? null : current ? 1 : 0]);
     }
     return {
+      ...animationOptions,
       title: { text: `${device.name} - 开关状态历史`, left: "center" },
       tooltip: {
         trigger: "axis",
@@ -409,6 +460,8 @@ const chartOption = computed(() => {
           step: "start",
           connectNulls: true,
           showSymbol: false,
+          progressive: 0,
+          progressiveThreshold: 100000,
           lineStyle: { width: 2 },
           areaStyle: { opacity: 0.35 },
           symbol: "none",
@@ -421,6 +474,7 @@ const chartOption = computed(() => {
   if (!firstKey) return {};
   const values = parsedPoints.value.map((p) => [p.t, toNumberOrNull(p.data?.[firstKey])]);
   return {
+    ...animationOptions,
     title: { text: `${device.name} - ${firstKey}历史`, left: "center" },
     tooltip: { trigger: "axis" },
     grid: { left: "3%", right: "4%", bottom: "22%", containLabel: true },
@@ -445,6 +499,8 @@ const chartOption = computed(() => {
         data: values,
         smooth: true,
         connectNulls: true,
+        progressive: 0,
+        progressiveThreshold: 100000,
         itemStyle: { color: "#2563eb" },
       },
     ],
@@ -459,6 +515,10 @@ onMounted(async () => {
   } catch (error) {
     console.error("加载设备列表失败:", error);
   }
+});
+
+onUnmounted(() => {
+  cancelHistoryRequest();
 });
 </script>
 
