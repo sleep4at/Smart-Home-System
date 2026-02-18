@@ -129,3 +129,39 @@ class EnergyEstimateRegressionTests(TestCase):
         series_map = {ts: p for ts, p in result["series"]}
         self.assertEqual(series_map.get(datetime(2026, 2, 10, 9, 0, 0)), 0.0)
         self.assertEqual(series_map.get(datetime(2026, 2, 10, 11, 0, 0)), 900.0)
+
+    def test_device_energy_should_force_zero_power_when_on_false_even_if_power_reported(self):
+        """
+        开关类设备若上报 on=false，即使携带了非零 power_w，也应按关机 0W 处理。
+        """
+        device = Device.objects.create(
+            name="客厅空调",
+            type=DeviceType.AC_SWITCH,
+            current_state={"on": True, "temp": 26},
+        )
+
+        DeviceData.objects.create(
+            device=device,
+            timestamp=datetime(2026, 2, 10, 8, 0, 0),
+            data={"on": True, "temp": 26, "power_w": 900.0},
+        )
+        # 异常数据：关机点携带了旧功率
+        DeviceData.objects.create(
+            device=device,
+            timestamp=datetime(2026, 2, 10, 9, 0, 0),
+            data={"on": False, "power_w": 480.0},
+        )
+        DeviceData.objects.create(
+            device=device,
+            timestamp=datetime(2026, 2, 10, 11, 0, 0),
+            data={"on": True, "temp": 26, "power_w": 900.0},
+        )
+
+        start = datetime(2026, 2, 10, 8, 30, 0)
+        end = datetime(2026, 2, 10, 11, 30, 0)
+        result = _device_energy_in_range(device, start, end)
+
+        # 仅统计两段开启：08:30-09:00 + 11:00-11:30 = 0.9 kWh
+        self.assertAlmostEqual(result["energy_kwh"], 0.9, places=3)
+        series_map = {ts: p for ts, p in result["series"]}
+        self.assertEqual(series_map.get(datetime(2026, 2, 10, 9, 0, 0)), 0.0)

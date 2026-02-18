@@ -41,6 +41,18 @@ def _is_runtime_trackable(device: Device) -> bool:
     return device.type in RUNTIME_TRACKABLE_TYPES
 
 
+def _normalize_power_state_for_switch(device: Device, state: dict | None) -> dict:
+    """
+    对开关类设备做功率相关状态归一化：
+    - 当 on=False 时，忽略任何携带的 power_w/power，按关机处理。
+    """
+    s = dict(state) if isinstance(state, dict) else {}
+    if _is_runtime_trackable(device) and "on" in s and not bool(s.get("on")):
+        s.pop("power_w", None)
+        s.pop("power", None)
+    return s
+
+
 def _is_device_running(device: Device, state: dict | None, power_w: float) -> bool:
     if not _is_runtime_trackable(device):
         return False
@@ -126,12 +138,7 @@ def _device_energy_in_range(device: Device, start, end):
     prev_data = (prev or {}).get("data") or {}
     if isinstance(prev_data, dict):
         # 仅使用区间起点之前最后一条历史点作为基线，避免把“当前状态”回填到过去。
-        current_state = prev_data.copy()
-        # 历史点可能是 {"on": false}（未携带 power_w），
-        # 此时不能继承更早的测量功率到关机区间。
-        if "on" in current_state and not bool(current_state.get("on")):
-            current_state.pop("power_w", None)
-            current_state.pop("power", None)
+        current_state = _normalize_power_state_for_switch(device, prev_data)
         measured = _extract_measured_power_w(current_state)
         current_power = measured if measured is not None else estimate_power_w(device, current_state)
     else:
@@ -158,11 +165,7 @@ def _device_energy_in_range(device: Device, start, end):
             next_state = current_state.copy()
             if isinstance(row_data, dict):
                 next_state.update(row_data)
-                # 同上：当该条仅表示关机（未给 power 字段）时，清理旧功率，避免“关机后仍高功率”。
-                if "on" in row_data and "power_w" not in row_data and "power" not in row_data:
-                    if not bool(row_data.get("on")):
-                        next_state.pop("power_w", None)
-                        next_state.pop("power", None)
+                next_state = _normalize_power_state_for_switch(device, next_state)
             current_state = next_state
             measured = _extract_measured_power_w(current_state)
             current_power = measured if measured is not None else estimate_power_w(device, current_state)
@@ -176,11 +179,7 @@ def _device_energy_in_range(device: Device, start, end):
         new_state = current_state.copy()
         if isinstance(row_data, dict):
             new_state.update(row_data)
-            # 同上：当该条仅表示关机（未给 power 字段）时，清理旧功率，避免“关机后仍高功率”。
-            if "on" in row_data and "power_w" not in row_data and "power" not in row_data:
-                if not bool(row_data.get("on")):
-                    new_state.pop("power_w", None)
-                    new_state.pop("power", None)
+            new_state = _normalize_power_state_for_switch(device, new_state)
         measured = _extract_measured_power_w(new_state)
         new_power = measured if measured is not None else estimate_power_w(device, new_state)
         if float(new_power) != float(current_power):
